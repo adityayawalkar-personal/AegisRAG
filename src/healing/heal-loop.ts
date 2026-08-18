@@ -8,7 +8,7 @@ import {
   getHealAttemptById,
   getLatestHealAttempts,
   setCollectorState,
-  type RawRunRecord,
+  type RawRunRecord, 
   type HealAttemptRecord 
 } from '../db/database.js';
 import { getSourceById, type SourceConfig } from '../config/sources.js';
@@ -76,7 +76,7 @@ export async function defaultCliExecutor(
  * Initiates the self-healing workflow:
  * 1. Checks circuit breaker state
  * 2. Generates Gemma plain-language diagnosis (< 900 chars)
- * 3. Transitions state machine: HEALTHY -> DEGRADED -> HEALING
+ * 3. Transitions state machine: (HEALTHY/RECOVERED) -> DEGRADED -> HEALING
  * 4. Triggers `bdata scraper heal` without --auto-approve
  * 5. Captures awaiting_approval envelope and preview_result
  */
@@ -113,10 +113,10 @@ export async function initiateHeal(
 
   console.log(`[heal-loop] 🧠 Gemma Diagnosis (${diagnosis.characterCount} chars via ${diagnosis.generatedBy}): "${diagnosis.description}"`);
 
-  // 4. Update collector state: HEALTHY -> DEGRADED -> HEALING
+  // 4. Update collector state: (HEALTHY/RECOVERED) -> DEGRADED -> HEALING
   let currentState = breaker.getState(run.collector_id);
-  if (currentState.status === 'HEALTHY') {
-    validateStateTransition('HEALTHY', 'DEGRADED', run.collector_id);
+  if (currentState.status === 'HEALTHY' || currentState.status === 'RECOVERED') {
+    validateStateTransition(currentState.status, 'DEGRADED', run.collector_id);
     currentState = {
       ...currentState,
       status: 'DEGRADED',

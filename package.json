@@ -9,6 +9,7 @@
     "server": "tsx src/server/app.ts",
     "runner": "tsx src/scraper-runner.ts",
     "seed": "tsx src/scripts/seed-history.ts",
+    "demo": "tsx src/scripts/demo-walkthrough.ts",
     "verify:day2": "tsx src/scripts/verify-day2.ts",
     "verify:day3": "tsx src/scripts/verify-day3.ts",
     "verify:day4": "tsx src/scripts/verify-day4.ts",
@@ -20,13 +21,16 @@
   "keywords": [
     "rag",
     "brightdata",
+    "scraper-studio",
     "self-healing",
     "sentinel",
-    "knowledge-pipeline"
+    "knowledge-pipeline",
+    "gemma"
   ],
-  "author": "",
+  "author": "Aditya Yawalkar",
   "license": "MIT",
   "dependencies": {
+    "@brightdata/cli": "1.2.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
     "better-sqlite3": "^13.0.3",
