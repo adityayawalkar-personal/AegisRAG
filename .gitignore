@@ -16,6 +16,13 @@ build/
 out/
 *.log
 
+# Local databases
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Bright Data CLI cache/temp files
 .bdata/
 
