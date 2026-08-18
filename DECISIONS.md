@@ -38,3 +38,12 @@ This document records the rationale behind core design and architecture decision
 - **Strict Argument-Array Shell Safety on Model Output**: Because the heal prompt originates from model output derived from untrusted scraped HTML, all CLI calls (`bdata scraper heal`, `approve`, `reject`) use `execFile` with an argument array, eliminating command-injection risks.
 - **Failure Classification Prior to Heal Escalation**: Routed HTTP 429 rate limits, 5xx server errors, and network timeouts to an exponential backoff retry loop (up to 3 attempts) rather than triggering expensive, ineffective scraper heals.
 - **3-Strike Circuit Breaker & State Machine**: Formalized collector states (`HEALTHY -> DEGRADED -> HEALING -> RECOVERED -> HEALTHY`). After 3 consecutive failed or rejected heals, the circuit breaker trips to `DEGRADED_PERMANENT`, halting automatic healing until manual review and reset.
+
+---
+
+### Day 5 (Aug 21, 2026) — Structure-Preserving, Self-Cleaning Chunking & Hybrid Indexing
+
+- **Parent-Child Section Hierarchy (`parent_id`, `heading_path`)**: Chunks retain explicit pointers to their parent document sections and heading paths. This enables the retrieval engine on Day 6 to expand top-matching fragments to full context windows without hallucinating disconnected sentences.
+- **Pre-Embedding PII Redaction Boundary**: Filtered all raw web content for email addresses, phone numbers, and sensitive identifiers prior to generating embeddings or indexing into BM25.
+- **Schema Invalidation & Stale Chunk Self-Cleaning**: Implemented strict schema versioning (`schema_version`). When a self-healing event or config update modifies a collector's schema, all chunks tagged with superseded versions (`< currentVersion`) are atomically deleted from both SQLite and BM25 before indexing new runs, permanently preventing stale and corrupted extractions from lingering in the knowledge base.
+- **Sentinel Quality Ingestion Gate**: Guarded the indexing entry point so that only runs with `run_status = 'HEALTHY'` can be chunked or embedded. Corrupted, divergent, or soft-failure runs are rejected before reaching the index.

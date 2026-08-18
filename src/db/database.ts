@@ -51,6 +51,21 @@ export interface CollectorStateRecord {
   updated_at: string;
 }
 
+export interface ChunkRecord {
+  chunk_id: string;
+  parent_id: string;
+  document_id: string;
+  collector_id: string;
+  run_id: string;
+  schema_version: number;
+  heading_path: string; // JSON array of string
+  content: string;
+  token_count: number;
+  embedding: string | null; // JSON array of floats or null
+  pii_redacted: number; // 0 or 1
+  created_at: string;
+}
+
 const DEFAULT_DB_DIR = path.join(process.cwd(), 'data');
 const DEFAULT_DB_PATH = path.join(DEFAULT_DB_DIR, 'aegisrag.db');
 
@@ -128,6 +143,22 @@ export function initSchema(db: DatabaseType): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS chunks_index (
+      chunk_id TEXT PRIMARY KEY,
+      parent_id TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      collector_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      heading_path TEXT NOT NULL,
+      content TEXT NOT NULL,
+      token_count INTEGER NOT NULL,
+      embedding TEXT,
+      pii_redacted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES raw_runs(run_id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_raw_runs_source_completed 
     ON raw_runs(source_id, completed_at DESC);
 
@@ -142,6 +173,15 @@ export function initSchema(db: DatabaseType): void {
 
     CREATE INDEX IF NOT EXISTS idx_heal_attempts_collector 
     ON heal_attempts(collector_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_chunks_collector_version 
+    ON chunks_index(collector_id, schema_version);
+
+    CREATE INDEX IF NOT EXISTS idx_chunks_run_id 
+    ON chunks_index(run_id);
+
+    CREATE INDEX IF NOT EXISTS idx_chunks_parent_id 
+    ON chunks_index(parent_id);
   `);
 }
 
@@ -263,6 +303,74 @@ export function setCollectorState(
       updated_at = excluded.updated_at
   `);
   stmt.run(record);
+}
+
+export function insertChunks(chunks: ChunkRecord[], db: DatabaseType = getDatabase()): void {
+  if (chunks.length === 0) return;
+
+  const insertStmt = db.prepare(`
+    INSERT INTO chunks_index (
+      chunk_id, parent_id, document_id, collector_id, run_id,
+      schema_version, heading_path, content, token_count, embedding,
+      pii_redacted, created_at
+    ) VALUES (
+      @chunk_id, @parent_id, @document_id, @collector_id, @run_id,
+      @schema_version, @heading_path, @content, @token_count, @embedding,
+      @pii_redacted, @created_at
+    )
+  `);
+
+  const tx = db.transaction((records: ChunkRecord[]) => {
+    for (const record of records) {
+      insertStmt.run(record);
+    }
+  });
+
+  tx(chunks);
+}
+
+export function deleteChunksByCollectorAndSchemaVersion(
+  collectorId: string,
+  olderThanVersion: number,
+  db: DatabaseType = getDatabase()
+): number {
+  const stmt = db.prepare(`
+    DELETE FROM chunks_index
+    WHERE collector_id = ? AND schema_version < ?
+  `);
+  const result = stmt.run(collectorId, olderThanVersion);
+  return result.changes;
+}
+
+export function getChunksByCollector(
+  collectorId: string,
+  schemaVersion?: number,
+  db: DatabaseType = getDatabase()
+): ChunkRecord[] {
+  if (schemaVersion !== undefined) {
+    const stmt = db.prepare(`
+      SELECT * FROM chunks_index
+      WHERE collector_id = ? AND schema_version = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(collectorId, schemaVersion) as ChunkRecord[];
+  }
+  const stmt = db.prepare(`
+    SELECT * FROM chunks_index
+    WHERE collector_id = ?
+    ORDER BY created_at DESC
+  `);
+  return stmt.all(collectorId) as ChunkRecord[];
+}
+
+export function getChunksByRunId(runId: string, db: DatabaseType = getDatabase()): ChunkRecord[] {
+  const stmt = db.prepare(`SELECT * FROM chunks_index WHERE run_id = ?`);
+  return stmt.all(runId) as ChunkRecord[];
+}
+
+export function getChunksByParentId(parentId: string, db: DatabaseType = getDatabase()): ChunkRecord[] {
+  const stmt = db.prepare(`SELECT * FROM chunks_index WHERE parent_id = ?`);
+  return stmt.all(parentId) as ChunkRecord[];
 }
 
 export function getLatestRuns(
