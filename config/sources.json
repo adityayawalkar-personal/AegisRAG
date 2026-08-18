@@ -1,0 +1,22 @@
+[
+  {
+    "source_id": "github-trending",
+    "name": "GitHub Trending Repositories",
+    "target_url": "https://github.com/trending",
+    "collector_id": "c_msytsxke2c5eegz5we",
+    "expected_fields": [
+      "product_page_url",
+      "trending_repositories"
+    ],
+    "field_types": {
+      "product_page_url": "url",
+      "trending_repositories": "array"
+    },
+    "validation_thresholds": {
+      "baseline_window": 5,
+      "corruption_threshold_pct": 20,
+      "duplicate_threshold_pct": 50
+    },
+    "created_at": "2026-08-18"
+  }
+]

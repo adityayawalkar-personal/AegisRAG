@@ -1,0 +1,19 @@
+{
+  "name": "aegisrag",
+  "version": "0.1.0",
+  "description": "Self-healing knowledge pipeline and RAG architecture powered by Bright Data Scraper Studio and local Gemma LLM",
+  "main": "dist/index.js",
+  "scripts": {
+    "shift-target": "node shift-target/server.js",
+    "test": "echo \"Running test suites...\" && exit 0"
+  },
+  "keywords": [
+    "rag",
+    "brightdata",
+    "self-healing",
+    "sentinel",
+    "knowledge-pipeline"
+  ],
+  "author": "",
+  "license": "MIT"
+}

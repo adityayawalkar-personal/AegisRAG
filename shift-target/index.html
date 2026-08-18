@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Framework Core — Official Changelog & Release Notes</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --tag-bg: #0369a1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 2rem 1rem; line-height: 1.6; }
+    .container { max-width: 800px; margin: 0 auto; }
+    header { margin-bottom: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; }
+    h1 { font-size: 2.25rem; font-weight: 700; color: var(--text); margin-bottom: 0.5rem; }
+    .subtitle { color: var(--text-muted); font-size: 1.1rem; }
+    
+    /* TARGET ELEMENTS FOR SABOTAGE ON DAY 4 DEMO */
+    /* SABOTAGE POINT 1: .release-card container and wrapper class */
+    .release-feed { display: flex; flex-direction: column; gap: 1.5rem; }
+    .release-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
+    
+    .release-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    
+    /* SABOTAGE POINT 2: .release-title and tag structure */
+    .release-title { font-size: 1.4rem; color: var(--text); font-weight: 600; }
+    .version-tag { background: var(--tag-bg); color: #fff; font-size: 0.85rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 9999px; }
+    
+    /* SABOTAGE POINT 3: .release-date and summary structure */
+    .release-meta { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+    .release-summary { color: #cbd5e1; font-size: 1rem; margin-bottom: 1rem; }
+    .release-link { color: var(--accent); text-decoration: none; font-weight: 500; font-size: 0.95rem; }
+    .release-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Framework Core — Releases</h1>
+      <p class="subtitle">Official changelog, engine upgrades, security patches, and migration notes.</p>
+    </header>
+
+    <!-- 
+      =======================================================================
+      TARGET DOM STRUCTURE (DEMO FIXTURE)
+      Fields: title, version_tag, release_date, summary, changelog_url
+      
+      DAY 4 SABOTAGE TARGETS:
+      1. Container: .release-card -> changed to article.changelog-post
+      2. Title & Version: h2.release-title / span.version-tag -> changed to h3.heading-title / div.badge-pill
+      3. Date & Link: time.release-date / a.release-link -> changed to span.meta-published / a.docs-anchor
+      =======================================================================
+    -->
+    <main class="release-feed">
+      <!-- Item 1 -->
+      <article class="release-card">
+        <div class="release-header">
+          <h2 class="release-title">Hyperion Engine Architecture & Zero-Copy Streaming</h2>
+          <span class="version-tag">v4.2.0</span>
+        </div>
+        <div class="release-meta">
+          <time class="release-date" datetime="2026-08-16">August 16, 2026</time>
+        </div>
+        <p class="release-summary">
+          Introduces full zero-copy streaming buffers across all vector embeddings endpoints, reducing memory footprint by 45% during large document ingestion.
+        </p>
+        <a class="release-link" href="https://example.com/changelog/v4-2-0">Read full v4.2.0 release notes &rarr;</a>
+      </article>
+
+      <!-- Item 2 -->
+      <article class="release-card">
+        <div class="release-header">
+          <h2 class="release-title">Sentinel Autonomous Drift Detection & Circuit Breakers</h2>
+          <span class="version-tag">v4.1.0</span>
+        </div>
+        <div class="release-meta">
+          <time class="release-date" datetime="2026-08-10">August 10, 2026</time>
+        </div>
+        <p class="release-summary">
+          Added rolling baseline verification and automatic quarantine for corrupted DOM schemas, preventing poisoned extractions from contaminating RAG indices.
+        </p>
+        <a class="release-link" href="https://example.com/changelog/v4-1-0">Read full v4.1.0 release notes &rarr;</a>
+      </article>
+
+      <!-- Item 3 -->
+      <article class="release-card">
+        <div class="release-header">
+          <h2 class="release-title">Reciprocal Rank Fusion Hybrid Search Integration</h2>
+          <span class="version-tag">v4.0.0</span>
+        </div>
+        <div class="release-meta">
+          <time class="release-date" datetime="2026-08-01">August 1, 2026</time>
+        </div>
+        <p class="release-summary">
+          Unified dense vector semantic retrieval with sparse BM25 keyword matching using reciprocal rank fusion, improving cold-query precision by 32%.
+        </p>
+        <a class="release-link" href="https://example.com/changelog/v4-0-0">Read full v4.0.0 release notes &rarr;</a>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

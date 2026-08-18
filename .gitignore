@@ -1,0 +1,26 @@
+# Environment variables & credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build and runtime artifacts
+dist/
+build/
+.next/
+out/
+*.log
+
+# Bright Data CLI cache/temp files
+.bdata/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

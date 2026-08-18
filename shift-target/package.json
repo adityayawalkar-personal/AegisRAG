@@ -1,0 +1,9 @@
+{
+  "name": "shift-target",
+  "version": "1.0.0",
+  "description": "Deterministic demo fixture site for AegisRAG self-healing scraper sabotage",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
