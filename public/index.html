@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisRAG — Self-Healing Knowledge Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-badge">AEGIS</div>
+        <div class="brand-text">
+          <h1>AegisRAG</h1>
+          <p>Autonomous Self-Healing Knowledge Pipeline & Verifiable RAG</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="live-indicator">
+          <span class="pulse-dot"></span>
+          <span>SYSTEM LIVE</span>
+        </div>
+        <div class="auth-box">
+          <input type="password" id="apiKeyInput" placeholder="API Key / Auth Secret" value="aegisrag-secret-token-2026" />
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav">
+      <button class="nav-tab active" data-tab="chat-tab" id="tabChatBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span>Verifiable Chat</span>
+      </button>
+      <button class="nav-tab" data-tab="health-tab" id="tabHealthBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        <span>Health Console</span>
+      </button>
+      <button class="nav-tab" data-tab="replay-tab" id="tabReplayBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Incident Replay</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- 1. Chat Tab -->
+      <section id="chat-tab" class="tab-panel active">
+        <div class="chat-container">
+          <div class="chat-suggestions">
+            <span class="suggestion-label">Suggested Queries:</span>
+            <button class="suggestion-btn" data-query="What does facebook/react provide?">"What does facebook/react provide?"</button>
+            <button class="suggestion-btn" data-query="What is public-apis?">"What is public-apis?"</button>
+            <button class="suggestion-btn" data-query="What is the current stock price of Apple?">"What is Apple stock price?" (Unanswerable)</button>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <div class="message system-message">
+              <div class="message-content">
+                <strong>Welcome to AegisRAG.</strong> Ask questions against live extracted knowledge. Every factual claim is verified and cited with source URLs and verified timestamps. Stale or corrupted data is automatically purged.
+              </div>
+            </div>
+          </div>
+
+          <form id="chatForm" class="chat-input-form">
+            <input type="text" id="queryInput" placeholder="Ask a question about indexed developer trends or changelogs..." autocomplete="off" required />
+            <button type="submit" id="sendBtn" class="primary-btn">
+              <span>Query RAG</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 2. Health Console Tab -->
+      <section id="health-tab" class="tab-panel">
+        <div class="health-container">
+          <div class="health-header-actions">
+            <h2>Collector Telemetry & Circuit Breaker</h2>
+            <div class="btn-group">
+              <button id="refreshHealthBtn" class="secondary-btn">Refresh State</button>
+              <button id="triggerRunBtn" class="primary-btn">Trigger Collector Run</button>
+            </div>
+          </div>
+
+          <div class="metrics-grid" id="metricsGrid">
+            <div class="metric-card">
+              <div class="metric-title">TOTAL INDEXED CHUNKS</div>
+              <div class="metric-value" id="metricTotalChunks">—</div>
+              <div class="metric-sub" id="metricBm25">BM25 Index Active</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">COLLECTOR STATUS</div>
+              <div class="metric-value" id="metricCollectorStatus">—</div>
+              <div class="metric-sub" id="metricCircuitBreaker">Circuit Breaker: OK</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">LAST SENTINEL CHECK</div>
+              <div class="metric-value" id="metricSentinelStatus">—</div>
+              <div class="metric-sub" id="metricLastValidated">Validated: —</div>
+            </div>
+          </div>
+
+          <div class="console-section">
+            <h3>Registered Knowledge Collectors</h3>
+            <div class="collector-cards" id="collectorCardsContainer">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <div class="console-section">
+            <h3>Pending Self-Healing Approvals</h3>
+            <div id="pendingHealsContainer" class="heals-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Incident Replay Tab -->
+      <section id="replay-tab" class="tab-panel">
+        <div class="replay-container">
+          <div class="replay-header">
+            <h2>Incident Replay: Break-to-Recovery Sequence</h2>
+            <p>Visual forensic reconstruction of recent schema breaks, Gemma AI diagnoses, preview captures, and operator approvals.</p>
+          </div>
+          <div class="timeline" id="incidentTimeline">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

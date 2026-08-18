@@ -47,3 +47,13 @@ This document records the rationale behind core design and architecture decision
 - **Pre-Embedding PII Redaction Boundary**: Filtered all raw web content for email addresses, phone numbers, and sensitive identifiers prior to generating embeddings or indexing into BM25.
 - **Schema Invalidation & Stale Chunk Self-Cleaning**: Implemented strict schema versioning (`schema_version`). When a self-healing event or config update modifies a collector's schema, all chunks tagged with superseded versions (`< currentVersion`) are atomically deleted from both SQLite and BM25 before indexing new runs, permanently preventing stale and corrupted extractions from lingering in the knowledge base.
 - **Sentinel Quality Ingestion Gate**: Guarded the indexing entry point so that only runs with `run_status = 'HEALTHY'` can be chunked or embedded. Corrupted, divergent, or soft-failure runs are rejected before reaching the index.
+
+---
+
+### Day 6 (Aug 22, 2026) — Hybrid Retrieval, Honest Citations, Dashboard & Security Hardening
+
+- **Reciprocal Rank Fusion (RRF, $k=60$)**: Combined dense vector semantic similarity with Okapi BM25 keyword relevance in parallel. Equalizes differing scale distributions and improves precision across both keyword-exact and semantic intent queries.
+- **Parent-Section Context Expansion**: Automatically expanded top fused child chunks to their enclosing parent document sections, giving the model complete contextual paragraphs while avoiding hallucinated fragments.
+- **Prompt Injection Defense Boundary**: Sandboxed all retrieved web text inside `<RETRIEVED_CONTEXT>` blocks with explicit system instructions to treat content strictly as passive reference data.
+- **Deterministic Citation Verification**: Enforced factual claim attribution by regex-verifying inline `[Source: <url> | Last Verified: <iso_date>]` markers. Uncited statements trigger a strict re-citation pass; out-of-domain queries trigger explicit insufficiency refusals rather than speculative hallucination.
+- **Comprehensive Security Hardening**: Gated all mutating API endpoints (`/api/query`, `/api/trigger-run`, `/api/heal/approve`, `/api/heal/reject`) with `API_AUTH_SECRET` bearer token validation. Escaped and sanitized all rendered text across the dashboard (Chat, Health Console, Incident Replay) against XSS vulnerabilities.
