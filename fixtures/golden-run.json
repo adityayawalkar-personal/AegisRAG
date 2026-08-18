@@ -1,0 +1,46 @@
+[
+  {
+    "repo_name": "public-apis/public-apis",
+    "author": "public-apis",
+    "description": "A collective list of free APIs for use in software and web development.",
+    "stars_today": "245 stars today",
+    "total_stars": "312,450",
+    "language": "Python",
+    "url": "https://github.com/public-apis/public-apis",
+    "product_page_url": "https://github.com/public-apis/public-apis",
+    "trending_repositories": []
+  },
+  {
+    "repo_name": "facebook/react",
+    "author": "facebook",
+    "description": "The library for web and native user interfaces.",
+    "stars_today": "89 stars today",
+    "total_stars": "228,100",
+    "language": "JavaScript",
+    "url": "https://github.com/facebook/react",
+    "product_page_url": "https://github.com/facebook/react",
+    "trending_repositories": []
+  },
+  {
+    "repo_name": "vercel/next.js",
+    "author": "vercel",
+    "description": "The React Framework for the Web.",
+    "stars_today": "112 stars today",
+    "total_stars": "125,400",
+    "language": "TypeScript",
+    "url": "https://github.com/vercel/next.js",
+    "product_page_url": "https://github.com/vercel/next.js",
+    "trending_repositories": []
+  },
+  {
+    "repo_name": "shadcn/ui",
+    "author": "shadcn",
+    "description": "Beautifully designed components that you can copy and paste into your apps.",
+    "stars_today": "178 stars today",
+    "total_stars": "72,800",
+    "language": "TypeScript",
+    "url": "https://github.com/shadcn/ui",
+    "product_page_url": "https://github.com/shadcn/ui",
+    "trending_repositories": []
+  }
+]

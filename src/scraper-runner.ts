@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { type Database as DatabaseType } from 'better-sqlite3';
 import { insertRawRun, type RawRunRecord, getDatabase } from './db/database.js';
 import { loadSourcesConfig, type SourceConfig } from './config/sources.js';
+import { Sentinel } from './sentinel/sentinel.js';
+import { type SentinelReport } from './sentinel/types.js';
 
 dotenv.config();
 
@@ -11,6 +13,7 @@ export interface ScraperExecutionResult {
   run: RawRunRecord;
   success: boolean;
   parsedData: unknown[] | null;
+  sentinelReport?: SentinelReport;
 }
 
 export interface CliExecutionOutput {
@@ -23,6 +26,7 @@ export interface RunnerOptions {
   timeoutMs?: number;
   customEnv?: NodeJS.ProcessEnv;
   db?: DatabaseType;
+  validateWithSentinel?: boolean;
   executor?: (collectorId: string, targetUrl: string, options: RunnerOptions) => Promise<CliExecutionOutput>;
 }
 
@@ -80,6 +84,7 @@ export async function executeCollectorCli(
 
 /**
  * Runs a collector for a given source configuration and records the result in SQLite raw_runs.
+ * Automatically triggers Sentinel validation on the completed run.
  */
 export async function runCollector(
   source: SourceConfig,
@@ -89,6 +94,7 @@ export async function runCollector(
   const startTime = Date.now();
   const completedAt = new Date().toISOString();
   const db = options.db || getDatabase();
+  const shouldValidate = options.validateWithSentinel !== false;
 
   console.log(`[scraper-runner] Starting run ${runId} for source '${source.source_id}' (${source.collector_id})...`);
 
@@ -119,10 +125,18 @@ export async function runCollector(
     };
 
     insertRawRun(failedRecord, db);
+
+    let sentinelReport: SentinelReport | undefined;
+    if (shouldValidate) {
+      const sentinel = new Sentinel(undefined, db);
+      sentinelReport = sentinel.validate(failedRecord, { sourceConfig: source, db });
+    }
+
     return {
       run: failedRecord,
       success: false,
       parsedData: null,
+      sentinelReport,
     };
   }
 
@@ -164,10 +178,18 @@ export async function runCollector(
     };
 
     insertRawRun(failedRecord, db);
+
+    let sentinelReport: SentinelReport | undefined;
+    if (shouldValidate) {
+      const sentinel = new Sentinel(undefined, db);
+      sentinelReport = sentinel.validate(failedRecord, { sourceConfig: source, db });
+    }
+
     return {
       run: failedRecord,
       success: false,
       parsedData: null,
+      sentinelReport,
     };
   }
 
@@ -188,10 +210,18 @@ export async function runCollector(
 
   insertRawRun(successRecord, db);
 
+  let sentinelReport: SentinelReport | undefined;
+  if (shouldValidate) {
+    const sentinel = new Sentinel(undefined, db);
+    sentinelReport = sentinel.validate(successRecord, { sourceConfig: source, db });
+    console.log(`[sentinel] Run ${runId} validated: ${sentinelReport.status} — ${sentinelReport.diffSummary}`);
+  }
+
   return {
     run: successRecord,
     success: true,
     parsedData,
+    sentinelReport,
   };
 }
 
