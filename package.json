@@ -10,6 +10,7 @@
     "seed": "tsx src/scripts/seed-history.ts",
     "verify:day2": "tsx src/scripts/verify-day2.ts",
     "verify:day3": "tsx src/scripts/verify-day3.ts",
+    "verify:day4": "tsx src/scripts/verify-day4.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

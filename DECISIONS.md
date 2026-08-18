@@ -29,3 +29,12 @@ This document records the rationale behind core design and architecture decision
 - **Noise Immunity (< 20% Corruption Threshold)**: Implemented an explicit 20% failure threshold. Single-row glitches or isolated null fields keep the run marked `HEALTHY`, preventing false-positive heal loops.
 - **Soft-Failure Detection via Token-Overlap Clustering**: Detected bot-walls, CAPTCHAs, and Cloudflare challenges that return HTTP 200 by computing pairwise text similarity across extracted rows (>50% near-duplicate content triggers `SOFT_FAILURE`).
 - **Strict Separation of Detection & Remediation**: The Sentinel engine has zero side effects beyond recording structured diagnostic reports to the `run_status` table in SQLite. Self-healing remediation (Day 4) is decoupled from detection.
+
+---
+
+### Day 4 (Aug 20, 2026) — The Self-Healing Loop: Gemma, State Machine & Circuit Breaker
+
+- **Gemma 4 E2B Plain-Language Diagnosis Constraint**: Configured the local inference prompt to produce strictly ONE single plain-language sentence under 900 characters detailing broken fields and expected replacements. Natural language descriptions give Scraper Studio's generative engine the exact semantic intent needed to regenerate CSS/XPath selectors.
+- **Strict Argument-Array Shell Safety on Model Output**: Because the heal prompt originates from model output derived from untrusted scraped HTML, all CLI calls (`bdata scraper heal`, `approve`, `reject`) use `execFile` with an argument array, eliminating command-injection risks.
+- **Failure Classification Prior to Heal Escalation**: Routed HTTP 429 rate limits, 5xx server errors, and network timeouts to an exponential backoff retry loop (up to 3 attempts) rather than triggering expensive, ineffective scraper heals.
+- **3-Strike Circuit Breaker & State Machine**: Formalized collector states (`HEALTHY -> DEGRADED -> HEALING -> RECOVERED -> HEALTHY`). After 3 consecutive failed or rejected heals, the circuit breaker trips to `DEGRADED_PERMANENT`, halting automatic healing until manual review and reset.
