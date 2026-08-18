@@ -2,6 +2,8 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 
+export type RunStatusType = 'HEALTHY' | 'DIVERGENT' | 'SOFT_FAILURE' | 'SCHEMA_CORRUPTED' | 'FAILED';
+
 export interface RawRunRecord {
   run_id: string;
   source_id: string;
@@ -13,6 +15,17 @@ export interface RawRunRecord {
   error_message: string | null;
   execution_duration_ms: number;
   completed_at: string;
+}
+
+export interface RunStatusRecord {
+  status_id: string;
+  run_id: string;
+  source_id: string;
+  status: RunStatusType;
+  failed_fields: string; // JSON string array
+  diff_summary: string;
+  metrics: string; // JSON object
+  validated_at: string;
 }
 
 const DEFAULT_DB_DIR = path.join(process.cwd(), 'data');
@@ -58,11 +71,29 @@ export function initSchema(db: DatabaseType): void {
       completed_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS run_status (
+      status_id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('HEALTHY', 'DIVERGENT', 'SOFT_FAILURE', 'SCHEMA_CORRUPTED', 'FAILED')),
+      failed_fields TEXT NOT NULL,
+      diff_summary TEXT NOT NULL,
+      metrics TEXT NOT NULL,
+      validated_at TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES raw_runs(run_id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_raw_runs_source_completed 
     ON raw_runs(source_id, completed_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_raw_runs_status 
     ON raw_runs(status);
+
+    CREATE INDEX IF NOT EXISTS idx_run_status_source_validated 
+    ON run_status(source_id, validated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_run_status_run_id 
+    ON run_status(run_id);
   `);
 }
 
@@ -90,6 +121,32 @@ export function insertRawRun(record: RawRunRecord, db: DatabaseType = getDatabas
       @error_message,
       @execution_duration_ms,
       @completed_at
+    )
+  `);
+
+  stmt.run(record);
+}
+
+export function insertRunStatus(record: RunStatusRecord, db: DatabaseType = getDatabase()): void {
+  const stmt = db.prepare(`
+    INSERT INTO run_status (
+      status_id,
+      run_id,
+      source_id,
+      status,
+      failed_fields,
+      diff_summary,
+      metrics,
+      validated_at
+    ) VALUES (
+      @status_id,
+      @run_id,
+      @source_id,
+      @status,
+      @failed_fields,
+      @diff_summary,
+      @metrics,
+      @validated_at
     )
   `);
 
@@ -135,6 +192,32 @@ export function getRunById(
   `);
 
   return stmt.get(runId) as RawRunRecord | undefined;
+}
+
+export function getLatestRunStatus(
+  sourceId: string,
+  limit: number = 10,
+  db: DatabaseType = getDatabase()
+): RunStatusRecord[] {
+  const stmt = db.prepare(`
+    SELECT * FROM run_status 
+    WHERE source_id = ? 
+    ORDER BY validated_at DESC 
+    LIMIT ?
+  `);
+
+  return stmt.all(sourceId, limit) as RunStatusRecord[];
+}
+
+export function getRunStatusByRunId(
+  runId: string,
+  db: DatabaseType = getDatabase()
+): RunStatusRecord | undefined {
+  const stmt = db.prepare(`
+    SELECT * FROM run_status WHERE run_id = ?
+  `);
+
+  return stmt.get(runId) as RunStatusRecord | undefined;
 }
 
 export function countRuns(
