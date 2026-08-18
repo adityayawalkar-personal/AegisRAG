@@ -8,6 +8,7 @@
     "shift-target": "node shift-target/server.js",
     "runner": "tsx src/scraper-runner.ts",
     "seed": "tsx src/scripts/seed-history.ts",
+    "verify:day2": "tsx src/scripts/verify-day2.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
