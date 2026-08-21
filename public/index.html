@@ -12,37 +12,38 @@
 <body>
   <div class="app-container">
     <!-- Header -->
-    <header class="app-header">
+    <header class="app-header" role="banner">
       <div class="brand">
-        <div class="brand-badge">AEGIS</div>
+        <div class="brand-badge" aria-hidden="true">AEGIS</div>
         <div class="brand-text">
           <h1>AegisRAG</h1>
           <p>Autonomous Self-Healing Knowledge Pipeline & Verifiable RAG</p>
         </div>
       </div>
       <div class="header-status">
-        <div class="live-indicator">
-          <span class="pulse-dot"></span>
+        <div class="live-indicator" aria-live="polite">
+          <span class="pulse-dot" aria-hidden="true"></span>
           <span>SYSTEM LIVE</span>
         </div>
-        <div class="auth-box">
-          <input type="password" id="apiKeyInput" placeholder="Enter API Auth Secret" />
-        </div>
+        <button id="openAuthModalBtn" class="settings-btn" aria-label="API Authentication Settings" title="Configure API Authentication Secret">
+          <span id="authBadgeDot" class="auth-badge-dot"></span>
+          <span>API Auth</span>
+        </button>
       </div>
     </header>
 
     <!-- Navigation Tabs -->
-    <nav class="app-nav">
-      <button class="nav-tab active" data-tab="chat-tab" id="tabChatBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    <nav class="app-nav" role="tablist" aria-label="Main Navigation Tabs">
+      <button class="nav-tab active" data-tab="chat-tab" id="tabChatBtn" role="tab" aria-selected="true" aria-controls="chat-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         <span>Verifiable Chat</span>
       </button>
-      <button class="nav-tab" data-tab="health-tab" id="tabHealthBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <button class="nav-tab" data-tab="health-tab" id="tabHealthBtn" role="tab" aria-selected="false" aria-controls="health-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         <span>Health Console</span>
       </button>
-      <button class="nav-tab" data-tab="replay-tab" id="tabReplayBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      <button class="nav-tab" data-tab="replay-tab" id="tabReplayBtn" role="tab" aria-selected="false" aria-controls="replay-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
         <span>Incident Replay</span>
       </button>
     </nav>
@@ -50,41 +51,44 @@
     <!-- Main Content Area -->
     <main class="main-content">
       <!-- 1. Chat Tab -->
-      <section id="chat-tab" class="tab-panel active">
+      <section id="chat-tab" class="tab-panel active" role="tabpanel" aria-labelledby="tabChatBtn">
         <div class="chat-container">
-          <div class="chat-suggestions">
+          <div class="chat-suggestions" aria-label="Suggested Queries">
             <span class="suggestion-label">Suggested Queries:</span>
             <button class="suggestion-btn" data-query="What does facebook/react provide?">"What does facebook/react provide?"</button>
             <button class="suggestion-btn" data-query="What is public-apis?">"What is public-apis?"</button>
             <button class="suggestion-btn" data-query="What is the current stock price of Apple?">"What is Apple stock price?" (Unanswerable)</button>
           </div>
 
-          <div class="chat-messages" id="chatMessages">
+          <div class="chat-messages" id="chatMessages" role="log" aria-live="polite">
             <div class="message system-message">
               <div class="message-content">
-                <strong>Welcome to AegisRAG.</strong> Ask questions against live extracted knowledge. Every factual claim is verified and cited with source URLs and verified timestamps. Stale or corrupted data is automatically purged.
+                <strong>Welcome to AegisRAG.</strong> Ask questions against live extracted knowledge. Every factual claim is verified and cited with source URLs and verified timestamps. Stale or corrupted data is automatically purged on schema heals.
               </div>
             </div>
           </div>
 
-          <form id="chatForm" class="chat-input-form">
-            <input type="text" id="queryInput" placeholder="Ask a question about indexed developer trends or changelogs..." autocomplete="off" required />
-            <button type="submit" id="sendBtn" class="primary-btn">
+          <form id="chatForm" class="chat-input-form" aria-label="Ask RAG Question">
+            <input type="text" id="queryInput" placeholder="Ask a question about indexed developer trends or changelogs..." autocomplete="off" required aria-label="Question prompt" />
+            <button type="submit" id="sendBtn" class="primary-btn" aria-label="Submit Question">
               <span>Query RAG</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
           </form>
         </div>
       </section>
 
       <!-- 2. Health Console Tab -->
-      <section id="health-tab" class="tab-panel">
+      <section id="health-tab" class="tab-panel" role="tabpanel" aria-labelledby="tabHealthBtn">
         <div class="health-container">
           <div class="health-header-actions">
             <h2>Collector Telemetry & Circuit Breaker</h2>
             <div class="btn-group">
+              <select id="sourceSelect" class="source-select" aria-label="Select Source to Trigger">
+                <option value="github-trending">Source: GitHub Trending (github-trending)</option>
+              </select>
+              <button id="triggerRunBtn" class="primary-btn">Trigger Run</button>
               <button id="refreshHealthBtn" class="secondary-btn">Refresh State</button>
-              <button id="triggerRunBtn" class="primary-btn">Trigger Collector Run</button>
             </div>
           </div>
 
@@ -123,7 +127,7 @@
       </section>
 
       <!-- 3. Incident Replay Tab -->
-      <section id="replay-tab" class="tab-panel">
+      <section id="replay-tab" class="tab-panel" role="tabpanel" aria-labelledby="tabReplayBtn">
         <div class="replay-container">
           <div class="replay-header">
             <h2>Incident Replay: Break-to-Recovery Sequence</h2>
@@ -136,6 +140,47 @@
       </section>
     </main>
   </div>
+
+  <!-- Auth Settings Modal -->
+  <div id="authModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="authModalTitle">API Authentication Secret</h3>
+        <button id="closeAuthModalBtn" class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Enter the <code>API_AUTH_SECRET</code> configured on your server to authorize RAG queries, collector executions, and heal approvals.</p>
+        <input type="password" id="modalApiKeyInput" class="modal-input" placeholder="Paste your API Auth Secret here..." />
+      </div>
+      <div class="modal-footer">
+        <button id="clearAuthBtn" class="secondary-btn">Clear</button>
+        <button id="saveAuthBtn" class="primary-btn">Save Secret</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Dialog Modal -->
+  <div id="confirmModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="confirmModalTitle">Confirm Action</h3>
+        <button id="closeConfirmModalBtn" class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmModalMessage">Are you sure you want to proceed?</p>
+        <div id="confirmPromptContainer" style="display:none; margin-top:8px;">
+          <input type="text" id="confirmPromptInput" class="modal-input" placeholder="Enter reason..." />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelConfirmBtn" class="secondary-btn">Cancel</button>
+        <button id="acceptConfirmBtn" class="primary-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="assertive"></div>
 
   <script src="/app.js"></script>
 </body>

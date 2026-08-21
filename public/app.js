@@ -1,26 +1,625 @@
 // AegisRAG Dashboard Application Logic
 
-function getAuthHeader() {
-  const input = document.getElementById('apiKeyInput');
-  if (input && input.value.trim()) {
-    localStorage.setItem('aegis_auth_token', input.value.trim());
-    return input.value.trim();
-  }
-  const cached = localStorage.getItem('aegis_auth_token');
-  return cached ? cached.trim() : '';
-}
+let apiKey = localStorage.getItem('aegisrag_api_key') || '';
+let previousCollectorStates = new Map();
+let isPollingActive = true;
+let pollTimer = null;
 
-// Restore cached key to input field on load
+// DOM Elements
+const chatForm = document.getElementById('chatForm');
+const queryInput = document.getElementById('queryInput');
+const sendBtn = document.getElementById('sendBtn');
+const chatMessages = document.getElementById('chatMessages');
+const navTabs = document.querySelectorAll('.nav-tab');
+const tabPanels = document.querySelectorAll('.tab-panel');
+const refreshHealthBtn = document.getElementById('refreshHealthBtn');
+const triggerRunBtn = document.getElementById('triggerRunBtn');
+const sourceSelect = document.getElementById('sourceSelect');
+const authBadgeDot = document.getElementById('authBadgeDot');
+const toastContainer = document.getElementById('toastContainer');
+
+// Modal Elements
+const openAuthModalBtn = document.getElementById('openAuthModalBtn');
+const authModal = document.getElementById('authModal');
+const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
+const modalApiKeyInput = document.getElementById('modalApiKeyInput');
+const saveAuthBtn = document.getElementById('saveAuthBtn');
+const clearAuthBtn = document.getElementById('clearAuthBtn');
+
+const confirmModal = document.getElementById('confirmModal');
+const closeConfirmModalBtn = document.getElementById('closeConfirmModalBtn');
+const confirmModalTitle = document.getElementById('confirmModalTitle');
+const confirmModalMessage = document.getElementById('confirmModalMessage');
+const confirmPromptContainer = document.getElementById('confirmPromptContainer');
+const confirmPromptInput = document.getElementById('confirmPromptInput');
+const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
+const acceptConfirmBtn = document.getElementById('acceptConfirmBtn');
+
+let confirmResolve = null;
+
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-  const input = document.getElementById('apiKeyInput');
-  const cached = localStorage.getItem('aegis_auth_token');
-  if (input && cached) {
-    input.value = cached;
-  }
+  setupEventListeners();
+  updateAuthBadge();
+  fetchHealthData();
+  fetchIncidentReplay();
+  startPolling();
 });
 
+function setupEventListeners() {
+  // Navigation Tabs
+  navTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-tab');
+      navTabs.forEach((t) => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tabPanels.forEach((p) => p.classList.remove('active'));
+
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      const activePanel = document.getElementById(target);
+      if (activePanel) activePanel.classList.add('active');
+
+      if (target === 'health-tab') fetchHealthData();
+      if (target === 'replay-tab') fetchIncidentReplay();
+    });
+  });
+
+  // Chat Form Submission
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const query = queryInput.value.trim();
+    if (!query) return;
+
+    appendMessage('user', query);
+    queryInput.value = '';
+
+    // Disable input and button while querying
+    setQueryLoading(true);
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['x-api-key'] = apiKey;
+
+      const res = await fetch('/api/query', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query }),
+      });
+
+      if (res.status === 401) {
+        appendMessage('system', '⚠️ Unauthorized: API Secret required. Click "API Auth" in the header to enter your API key.');
+        openAuthModal();
+        return;
+      }
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      appendBotResponse(data);
+    } catch (err) {
+      appendMessage('system', `❌ Error: ${err.message}`);
+      showToast(`Query failed: ${err.message}`, 'error');
+    } finally {
+      setQueryLoading(false);
+    }
+  });
+
+  // Suggested Queries
+  document.querySelectorAll('.suggestion-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      queryInput.value = btn.getAttribute('data-query');
+      queryInput.focus();
+    });
+  });
+
+  // Health Console Actions
+  refreshHealthBtn.addEventListener('click', () => {
+    fetchHealthData();
+    showToast('Telemetry refreshed', 'info');
+  });
+
+  triggerRunBtn.addEventListener('click', async () => {
+    const selectedSource = sourceSelect.value || 'github-trending';
+    triggerRunBtn.disabled = true;
+    triggerRunBtn.innerHTML = '<span>Running...</span> <span class="spinner"></span>';
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['x-api-key'] = apiKey;
+
+      const res = await fetch('/api/trigger-run', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ sourceId: selectedSource }),
+      });
+
+      if (res.status === 401) {
+        showToast('Unauthorized: API Secret required.', 'warning');
+        openAuthModal();
+        return;
+      }
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to trigger run');
+
+      showToast(`Run completed for ${selectedSource}! Outcome: ${data.outcome?.status || 'COMPLETED'}`, 'success');
+      fetchHealthData();
+      fetchIncidentReplay();
+    } catch (err) {
+      showToast(`Trigger failed: ${err.message}`, 'error');
+    } finally {
+      triggerRunBtn.disabled = false;
+      triggerRunBtn.innerHTML = 'Trigger Run';
+    }
+  });
+
+  // Auth Modal
+  openAuthModalBtn.addEventListener('click', openAuthModal);
+  closeAuthModalBtn.addEventListener('click', closeAuthModal);
+  authModal.addEventListener('click', (e) => {
+    if (e.target === authModal) closeAuthModal();
+  });
+
+  saveAuthBtn.addEventListener('click', () => {
+    apiKey = modalApiKeyInput.value.trim();
+    if (apiKey) {
+      localStorage.setItem('aegisrag_api_key', apiKey);
+      showToast('API Auth Secret saved', 'success');
+    } else {
+      localStorage.removeItem('aegisrag_api_key');
+      showToast('API Auth Secret removed', 'info');
+    }
+    updateAuthBadge();
+    closeAuthModal();
+  });
+
+  clearAuthBtn.addEventListener('click', () => {
+    modalApiKeyInput.value = '';
+    apiKey = '';
+    localStorage.removeItem('aegisrag_api_key');
+    updateAuthBadge();
+    showToast('API Secret cleared', 'info');
+    closeAuthModal();
+  });
+
+  // Confirmation Dialog
+  closeConfirmModalBtn.addEventListener('click', () => resolveConfirm(false));
+  cancelConfirmBtn.addEventListener('click', () => resolveConfirm(false));
+  acceptConfirmBtn.addEventListener('click', () => {
+    const isPrompt = confirmPromptContainer.style.display !== 'none';
+    if (isPrompt) {
+      resolveConfirm(confirmPromptInput.value.trim());
+    } else {
+      resolveConfirm(true);
+    }
+  });
+
+  // Keyboard accessibility (Esc to close modals)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (authModal.classList.contains('active')) closeAuthModal();
+      if (confirmModal.classList.contains('active')) resolveConfirm(false);
+    }
+  });
+}
+
+function setQueryLoading(isLoading) {
+  if (isLoading) {
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span>Querying...</span><span class="spinner" aria-hidden="true"></span>';
+    queryInput.disabled = true;
+  } else {
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = '<span>Query RAG</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+    queryInput.disabled = false;
+    queryInput.focus();
+  }
+}
+
+function updateAuthBadge() {
+  if (apiKey) {
+    authBadgeDot.classList.add('connected');
+    openAuthModalBtn.setAttribute('title', 'API Secret Configured');
+  } else {
+    authBadgeDot.classList.remove('connected');
+    openAuthModalBtn.setAttribute('title', 'No API Secret configured — click to configure');
+  }
+}
+
+function openAuthModal() {
+  modalApiKeyInput.value = apiKey;
+  authModal.classList.add('active');
+  modalApiKeyInput.focus();
+}
+
+function closeAuthModal() {
+  authModal.classList.remove('active');
+}
+
+function showConfirmDialog(title, message) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    confirmModalTitle.textContent = title;
+    confirmModalMessage.textContent = message;
+    confirmPromptContainer.style.display = 'none';
+    acceptConfirmBtn.textContent = 'Confirm';
+    confirmModal.classList.add('active');
+  });
+}
+
+function showPromptDialog(title, message, defaultVal = '') {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    confirmModalTitle.textContent = title;
+    confirmModalMessage.textContent = message;
+    confirmPromptInput.value = defaultVal;
+    confirmPromptContainer.style.display = 'block';
+    acceptConfirmBtn.textContent = 'Submit';
+    confirmModal.classList.add('active');
+    confirmPromptInput.focus();
+  });
+}
+
+function resolveConfirm(val) {
+  confirmModal.classList.remove('active');
+  if (confirmResolve) {
+    confirmResolve(val);
+    confirmResolve = null;
+  }
+}
+
+// Unified timestamp formatter
+function formatTimestamp(isoString) {
+  if (!isoString) return '—';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return String(isoString);
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return String(isoString);
+  }
+}
+
+// Toast Notifications
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// Background Polling
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (!isPollingActive) return;
+    await fetchHealthData(true);
+  }, 4000);
+}
+
+// Chat UI Rendering
+function appendMessage(role, text) {
+  const msg = document.createElement('div');
+  msg.className = `message ${role}-message`;
+  msg.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+  chatMessages.appendChild(msg);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function appendRecoveryBanner(collectorName, schemaVersion) {
+  const msg = document.createElement('div');
+  msg.className = 'message recovery-notice';
+  msg.innerHTML = `
+    <div class="message-content">
+      <strong>🎉 Knowledge Base Recovered:</strong> Collector <code>${escapeHtml(collectorName)}</code> transitioned to <strong>RECOVERED</strong>. Stale extractions purged and schema updated to <code>v${escapeHtml(schemaVersion)}</code>. Ask questions to verify fresh citations!
+    </div>
+  `;
+  chatMessages.appendChild(msg);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function appendBotResponse(data) {
+  const msg = document.createElement('div');
+  msg.className = 'message bot-message';
+
+  // Format citations properly: escape HTML first, then match and convert citation patterns
+  let formattedAnswer = escapeHtml(data.answer);
+  formattedAnswer = formattedAnswer.replace(
+    /\[Source:\s*([^\]|]+)\s*\|\s*Last Verified:\s*([^\]]+)\]/g,
+    (match, sourceUrl, lastVerified) => {
+      const cleanUrl = sourceUrl.trim();
+      const cleanDate = formatTimestamp(lastVerified.trim());
+      return `<span class="inline-citation">📍 <a href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a> <span class="citation-date">(${cleanDate})</span></span>`;
+    }
+  );
+
+  let citationsHtml = '';
+  if (data.citations && data.citations.length > 0) {
+    citationsHtml = `
+      <div class="citation-badge-list" aria-label="Verified Citations">
+        ${data.citations
+          .map(
+            (c) => `
+            <a href="${escapeHtml(c.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="citation-badge" title="Verified at ${formatTimestamp(c.lastVerifiedAt)}">
+              <span>🔗 ${escapeHtml(c.sourceUrl)}</span>
+              <span class="citation-date">(${formatTimestamp(c.lastVerifiedAt)})</span>
+            </a>`
+          )
+          .join('')}
+      </div>
+    `;
+  }
+
+  msg.innerHTML = `
+    <div class="message-content">${formattedAnswer}</div>
+    ${citationsHtml}
+  `;
+
+  chatMessages.appendChild(msg);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Health Data Fetching & Polling Diff Check
+async function fetchHealthData(isPoll = false) {
+  try {
+    const res = await fetch('/api/health');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // 1. Check for State Transitions (Heal Recovery Detection)
+    if (data.collectors && Array.isArray(data.collectors)) {
+      data.collectors.forEach((col) => {
+        const prevState = previousCollectorStates.get(col.collector_id);
+        if (prevState && prevState.status !== col.status) {
+          if (col.status === 'RECOVERED' || (prevState.status === 'HEALING' && col.status === 'HEALTHY')) {
+            appendRecoveryBanner(col.name || col.collector_id, col.schema_version);
+            showToast(`Collector ${col.name} recovered successfully!`, 'success');
+            fetchIncidentReplay();
+          }
+        }
+        previousCollectorStates.set(col.collector_id, {
+          status: col.status,
+          schema_version: col.schema_version,
+          name: col.name,
+        });
+      });
+
+      // Update source select dropdown if needed
+      updateSourceSelector(data.collectors);
+    }
+
+    // 2. Update Metrics Cards
+    document.getElementById('metricTotalChunks').textContent = data.knowledge_base?.total_chunks ?? '0';
+    document.getElementById('metricBm25').textContent = `BM25 & Vector Index Active (${data.knowledge_base?.total_documents ?? 0} docs)`;
+
+    const primaryCollector = data.collectors?.[0];
+    if (primaryCollector) {
+      const statusEl = document.getElementById('metricCollectorStatus');
+      statusEl.textContent = primaryCollector.status;
+      statusEl.className = `metric-value status-${primaryCollector.status.toLowerCase()}`;
+      document.getElementById('metricCircuitBreaker').textContent = `Circuit Breaker: ${primaryCollector.consecutive_failures || 0}/3 Strikes`;
+    }
+
+    const lastRun = data.recent_runs?.[0];
+    if (lastRun) {
+      document.getElementById('metricSentinelStatus').textContent = lastRun.status;
+      document.getElementById('metricLastValidated').textContent = `Validated: ${formatTimestamp(lastRun.completed_at)}`;
+    }
+
+    // 3. Render Registered Collectors
+    renderCollectors(data.collectors || []);
+
+    // 4. Render Pending Heals
+    renderPendingHeals(data.pending_heals || []);
+  } catch (err) {
+    if (!isPoll) console.error('Failed to fetch health telemetry:', err);
+  }
+}
+
+function updateSourceSelector(collectors) {
+  const currentVal = sourceSelect.value;
+  const optionsHtml = collectors
+    .map((c) => `<option value="${escapeHtml(c.source_id)}">Source: ${escapeHtml(c.name || c.source_id)} (${escapeHtml(c.source_id)})</option>`)
+    .join('');
+
+  if (sourceSelect.innerHTML !== optionsHtml) {
+    sourceSelect.innerHTML = optionsHtml;
+    if (currentVal) sourceSelect.value = currentVal;
+  }
+}
+
+function renderCollectors(collectors) {
+  const container = document.getElementById('collectorCardsContainer');
+  if (collectors.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-muted);">No collectors registered.</p>';
+    return;
+  }
+
+  container.innerHTML = collectors
+    .map(
+      (c) => `
+    <div class="collector-card">
+      <div>
+        <strong>${escapeHtml(c.name || c.collector_id)}</strong>
+        <div style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono', monospace;">
+          ID: ${escapeHtml(c.collector_id)} | Schema: v${escapeHtml(c.schema_version)} | Target: ${escapeHtml(c.target_url)}
+        </div>
+      </div>
+      <div>
+        <span class="status-badge status-${escapeHtml(c.status.toLowerCase())}">${escapeHtml(c.status)}</span>
+      </div>
+    </div>
+  `
+    )
+    .join('');
+}
+
+function renderPendingHeals(heals) {
+  const container = document.getElementById('pendingHealsContainer');
+  if (heals.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No pending heals. System is operating nominally.</p>';
+    return;
+  }
+
+  container.innerHTML = heals
+    .map((h) => {
+      let previewFormatted = 'No preview payload';
+      try {
+        if (h.preview_payload) {
+          const parsed = JSON.parse(h.preview_payload);
+          previewFormatted = JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        previewFormatted = h.preview_payload;
+      }
+
+      return `
+      <div class="heal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>Self-Healing Candidate #${escapeHtml(h.attempt_number)}</strong>
+            <span style="font-size:12px; color:var(--text-muted); margin-left:8px;">(Attempt ID: ${escapeHtml(h.attempt_id)})</span>
+          </div>
+          <span class="status-badge status-healing">AWAITING APPROVAL</span>
+        </div>
+
+        <p style="font-size:13px; color:var(--text-secondary);">
+          <strong>Gemma AI Repair Diagnosis:</strong> "${escapeHtml(h.heal_description)}"
+        </p>
+
+        <div style="font-size:12px; color:var(--text-muted);">Preview Extractions (Synthesized CSS Selectors):</div>
+        <pre class="preview-box">${escapeHtml(previewFormatted)}</pre>
+
+        <div class="btn-group" style="margin-top:6px;">
+          <button class="approve-btn" onclick="approveHeal('${escapeHtml(h.attempt_id)}')">Approve & Recover</button>
+          <button class="reject-btn" onclick="rejectHeal('${escapeHtml(h.attempt_id)}')">Reject Repair</button>
+        </div>
+      </div>
+    `;
+    })
+    .join('');
+}
+
+// Global functions for inline onclick handlers
+window.approveHeal = async function (attemptId) {
+  const confirmed = await showConfirmDialog(
+    'Approve Scraper Repair',
+    'Are you sure you want to approve this heal candidate? This will update the collector schema and transition state to RECOVERED.'
+  );
+  if (!confirmed) return;
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['x-api-key'] = apiKey;
+
+    const res = await fetch('/api/heal/approve', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ attemptId }),
+    });
+
+    if (res.status === 401) {
+      showToast('Unauthorized: API Secret required to approve.', 'warning');
+      openAuthModal();
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Approval failed');
+
+    showToast('Heal approved! Collector is now RECOVERED.', 'success');
+    fetchHealthData();
+    fetchIncidentReplay();
+  } catch (err) {
+    showToast(`Approval failed: ${err.message}`, 'error');
+  }
+};
+
+window.rejectHeal = async function (attemptId) {
+  const reason = await showPromptDialog('Reject Scraper Repair', 'Enter rejection reason (will record a strike on the circuit breaker):', 'Candidate extracted invalid data.');
+  if (reason === null) return;
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['x-api-key'] = apiKey;
+
+    const res = await fetch('/api/heal/reject', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ attemptId, reason }),
+    });
+
+    if (res.status === 401) {
+      showToast('Unauthorized: API Secret required to reject.', 'warning');
+      openAuthModal();
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Rejection failed');
+
+    showToast('Heal candidate rejected.', 'info');
+    fetchHealthData();
+    fetchIncidentReplay();
+  } catch (err) {
+    showToast(`Rejection failed: ${err.message}`, 'error');
+  }
+};
+
+// Incident Replay Timeline
+async function fetchIncidentReplay() {
+  try {
+    const res = await fetch('/api/incident-replay');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const container = document.getElementById('incidentTimeline');
+    if (!data.timeline || data.timeline.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-muted);">No incident events recorded yet.</p>';
+      return;
+    }
+
+    container.innerHTML = data.timeline
+      .map(
+        (event) => `
+      <div class="timeline-item">
+        <div class="timeline-content">
+          <div class="timeline-time">${formatTimestamp(event.timestamp)}</div>
+          <div class="timeline-title">${escapeHtml(event.title)}</div>
+          <div style="font-size:13px; color:var(--text-secondary);">${escapeHtml(event.description)}</div>
+        </div>
+      </div>
+    `
+      )
+      .join('');
+  } catch (err) {
+    console.error('Failed to load incident timeline:', err);
+  }
+}
+
+// HTML Escaping Utility
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -28,324 +627,3 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
-
-// 1. Tab Navigation
-document.querySelectorAll('.nav-tab').forEach((tab) => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.nav-tab').forEach((t) => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-
-    tab.classList.add('active');
-    const targetId = tab.getAttribute('data-tab');
-    const targetPanel = document.getElementById(targetId);
-    if (targetPanel) targetPanel.classList.add('active');
-
-    if (targetId === 'health-tab') fetchHealthData();
-    if (targetId === 'replay-tab') fetchIncidentReplay();
-  });
-});
-
-// 2. Query Suggestions
-document.querySelectorAll('.suggestion-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const query = btn.getAttribute('data-query');
-    const input = document.getElementById('queryInput');
-    if (input) {
-      input.value = query;
-      document.getElementById('chatForm').dispatchEvent(new Event('submit'));
-    }
-  });
-});
-
-// 3. Chat Q&A Handling
-const chatForm = document.getElementById('chatForm');
-const chatMessages = document.getElementById('chatMessages');
-
-chatForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const queryInput = document.getElementById('queryInput');
-  const query = queryInput.value.trim();
-  if (!query) return;
-
-  // Render User Message
-  appendMessage('user', query);
-  queryInput.value = '';
-
-  // Render Loading Indicator
-  const loadingMsgId = appendMessage('bot', '<em>Searching hybrid vector + BM25 index and generating verified answer...</em>');
-
-  try {
-    const token = getAuthHeader();
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers['x-api-key'] = token;
-    }
-
-    const res = await fetch('/api/query', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: 'HTTP Error ' + res.status }));
-      updateMessage(loadingMsgId, `⚠️ Query Error (${res.status}): ${escapeHtml(err.message || 'Request failed. Check API Auth Secret in header.')}`);
-      return;
-    }
-
-    const data = await res.json();
-    let formattedAnswer = escapeHtml(data.answer);
-
-    // Format inline citations nicely
-    formattedAnswer = formattedAnswer.replace(
-      /\[Source:\s*([^\]|]+)\s*\|\s*Last Verified:\s*([^\]]+)\]/g,
-      '<span class="inline-citation">📍 <a href="$1" target="_blank" rel="noopener">$1</a> ($2)</span>'
-    );
-
-    let badgesHtml = '';
-    if (data.citations && data.citations.length > 0) {
-      badgesHtml = '<div class="citation-badge-list">';
-      data.citations.forEach((c) => {
-        badgesHtml += `<a href="${escapeHtml(c.sourceUrl)}" target="_blank" rel="noopener" class="citation-badge">🔗 ${escapeHtml(c.sourceUrl)} (${escapeHtml(new Date(c.lastVerifiedAt).toLocaleDateString())})</a>`;
-      });
-      badgesHtml += '</div>';
-    }
-
-    updateMessage(loadingMsgId, formattedAnswer + badgesHtml);
-  } catch (err) {
-    updateMessage(loadingMsgId, `⚠️ Network error: ${escapeHtml(err.message)}`);
-  }
-});
-
-function appendMessage(role, htmlContent) {
-  const msgDiv = document.createElement('div');
-  const msgId = 'msg-' + Math.random().toString(36).slice(2, 9);
-  msgDiv.id = msgId;
-  msgDiv.className = `message ${role}-message`;
-  msgDiv.innerHTML = `<div class="message-content">${htmlContent}</div>`;
-  chatMessages.appendChild(msgDiv);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  return msgId;
-}
-
-function updateMessage(msgId, newHtmlContent) {
-  const el = document.getElementById(msgId);
-  if (el) {
-    el.innerHTML = `<div class="message-content">${newHtmlContent}</div>`;
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
-}
-
-// 4. Health Console Telemetry
-async function fetchHealthData() {
-  try {
-    const res = await fetch('/api/health');
-    if (!res.ok) return;
-    const data = await res.json();
-
-    document.getElementById('metricTotalChunks').textContent = data.totalChunksIndexed || 0;
-    document.getElementById('metricBm25').textContent = `BM25 Vocabulary: ${data.bm25IndexSize || 0} docs`;
-
-    const c0 = data.collectors && data.collectors[0];
-    if (c0) {
-      const statusEl = document.getElementById('metricCollectorStatus');
-      statusEl.textContent = c0.state;
-      statusEl.className = `metric-value status-${c0.state.toLowerCase()}`;
-
-      document.getElementById('metricCircuitBreaker').textContent = c0.circuitBreakerTripped
-        ? '⚡ Tripped (DEGRADED_PERMANENT)'
-        : `Breaker OK (${c0.consecutiveFailures}/3 strikes)`;
-
-      const lastStatus = c0.latestStatus;
-      if (lastStatus) {
-        document.getElementById('metricSentinelStatus').textContent = lastStatus.status;
-        document.getElementById('metricLastValidated').textContent = `Validated: ${new Date(lastStatus.validated_at).toLocaleTimeString()}`;
-      }
-    }
-
-    renderCollectors(data.collectors || []);
-    renderPendingHeals(data.collectors || []);
-  } catch (err) {
-    console.error('Failed to fetch health data:', err);
-  }
-}
-
-function renderCollectors(collectors) {
-  const container = document.getElementById('collectorCardsContainer');
-  if (!container) return;
-
-  if (collectors.length === 0) {
-    container.innerHTML = '<p class="text-muted">No collectors configured.</p>';
-    return;
-  }
-
-  container.innerHTML = collectors
-    .map((c) => {
-      const stateClass = `status-${c.state.toLowerCase()}`;
-      return `
-      <div class="collector-card">
-        <div>
-          <h4>${escapeHtml(c.name)} <span class="status-badge ${stateClass}">${escapeHtml(c.state)}</span></h4>
-          <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">ID: <code>${escapeHtml(c.collectorId)}</code> | Target: <a href="${escapeHtml(c.targetUrl)}" target="_blank">${escapeHtml(c.targetUrl)}</a></p>
-        </div>
-        <div style="text-align:right;">
-          <p style="font-size:12px; color:var(--text-muted);">Consecutive Failures: ${c.consecutiveFailures}</p>
-          <p style="font-size:12px; color:var(--text-muted);">${c.latestRun ? `Last Run: ${c.latestRun.status} (${c.latestRun.row_count} rows)` : 'No runs yet'}</p>
-        </div>
-      </div>
-    `;
-    })
-    .join('');
-}
-
-function renderPendingHeals(collectors) {
-  const container = document.getElementById('pendingHealsContainer');
-  if (!container) return;
-
-  const pendingAttempts = [];
-  collectors.forEach((c) => {
-    (c.healAttempts || []).forEach((h) => {
-      if (h.status === 'AWAITING_APPROVAL') {
-        pendingAttempts.push({ collector: c, attempt: h });
-      }
-    });
-  });
-
-  if (pendingAttempts.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">No pending heal attempts awaiting operator approval. System is operating normally.</p>';
-    return;
-  }
-
-  container.innerHTML = pendingAttempts
-    .map(({ collector, attempt }) => {
-      let previewFormatted = escapeHtml(attempt.preview_result || 'No preview returned');
-      try {
-        previewFormatted = JSON.stringify(JSON.parse(attempt.preview_result), null, 2);
-      } catch {}
-
-      return `
-      <div class="heal-card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <strong>Heal Attempt for ${escapeHtml(collector.name)} (Attempt #${attempt.attempt_number})</strong>
-          <span class="status-badge status-healing">AWAITING APPROVAL</span>
-        </div>
-        <p style="font-size:13px; color:var(--text-secondary);"><strong>Gemma AI Repair Diagnosis:</strong> "${escapeHtml(attempt.heal_description)}"</p>
-        <div>
-          <span style="font-size:12px; color:var(--text-muted);">Preview Extraction Result:</span>
-          <pre class="preview-box">${escapeHtml(previewFormatted)}</pre>
-        </div>
-        <div class="btn-group" style="margin-top:6px;">
-          <button class="approve-btn" onclick="handleApproveHeal('${escapeHtml(attempt.attempt_id)}')">Approve Repair</button>
-          <button class="reject-btn" onclick="handleRejectHeal('${escapeHtml(attempt.attempt_id)}')">Reject Repair</button>
-        </div>
-      </div>
-    `;
-    })
-    .join('');
-}
-
-window.handleApproveHeal = async function (attemptId) {
-  if (!confirm('Are you sure you want to approve this heal repair?')) return;
-  try {
-    const res = await fetch('/api/heal/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': getAuthHeader() },
-      body: JSON.stringify({ attemptId }),
-    });
-    if (res.ok) {
-      alert('Heal approved successfully! Collector state transitioned to RECOVERED.');
-      fetchHealthData();
-    } else {
-      const err = await res.json();
-      alert(`Approval error: ${err.message}`);
-    }
-  } catch (err) {
-    alert(`Request error: ${err.message}`);
-  }
-};
-
-window.handleRejectHeal = async function (attemptId) {
-  const reason = prompt('Reason for rejecting repair:', 'Manual rejection by operator');
-  if (!reason) return;
-  try {
-    const res = await fetch('/api/heal/reject', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': getAuthHeader() },
-      body: JSON.stringify({ attemptId, reason }),
-    });
-    if (res.ok) {
-      alert('Heal rejected. Strike recorded against circuit breaker.');
-      fetchHealthData();
-    } else {
-      const err = await res.json();
-      alert(`Rejection error: ${err.message}`);
-    }
-  } catch (err) {
-    alert(`Request error: ${err.message}`);
-  }
-};
-
-// Trigger Collector Run Button
-document.getElementById('triggerRunBtn')?.addEventListener('click', async () => {
-  const btn = document.getElementById('triggerRunBtn');
-  btn.disabled = true;
-  btn.textContent = 'Running Collector...';
-  try {
-    const res = await fetch('/api/trigger-run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': getAuthHeader() },
-      body: JSON.stringify({ sourceId: 'github-trending' }),
-    });
-    const data = await res.json();
-    alert(`Run completed with status: ${data.run?.status || 'UNKNOWN'}. Sentinel: ${data.sentinelReport?.status || 'N/A'}`);
-    fetchHealthData();
-  } catch (err) {
-    alert(`Trigger error: ${err.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Trigger Collector Run';
-  }
-});
-
-document.getElementById('refreshHealthBtn')?.addEventListener('click', fetchHealthData);
-
-// 5. Incident Replay Visualizer
-async function fetchIncidentReplay() {
-  const container = document.getElementById('incidentTimeline');
-  if (!container) return;
-
-  try {
-    const res = await fetch('/api/incident-replay');
-    if (!res.ok) return;
-    const data = await res.json();
-
-    if (!data.timeline || data.timeline.length === 0) {
-      container.innerHTML = '<p class="text-muted">No recent incident events recorded in SQLite logs.</p>';
-      return;
-    }
-
-    container.innerHTML = data.timeline
-      .map((item) => {
-        let detailsHtml = '';
-        if (item.details) {
-          detailsHtml = `<pre style="font-size:11px; background:var(--bg-primary); padding:8px; border-radius:4px; margin-top:6px; color:#a5d6ff;">${escapeHtml(JSON.stringify(item.details, null, 2))}</pre>`;
-        }
-
-        return `
-        <div class="timeline-item">
-          <div class="timeline-content">
-            <div class="timeline-time">${escapeHtml(new Date(item.timestamp).toLocaleString())}</div>
-            <div class="timeline-title">${escapeHtml(item.title)}</div>
-            ${detailsHtml}
-          </div>
-        </div>
-      `;
-      })
-      .join('');
-  } catch (err) {
-    container.innerHTML = `<p style="color:var(--accent-rose);">Failed to load incident replay: ${escapeHtml(err.message)}</p>`;
-  }
-}
-
-// Initial health fetch
-fetchHealthData();
