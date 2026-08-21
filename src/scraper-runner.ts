@@ -6,6 +6,7 @@ import { insertRawRun, type RawRunRecord, getDatabase } from './db/database.js';
 import { loadSourcesConfig, type SourceConfig } from './config/sources.js';
 import { Sentinel } from './sentinel/sentinel.js';
 import { type SentinelReport } from './sentinel/types.js';
+import { resolveBdataCliBinary } from './healing/heal-loop.js';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ const DEFAULT_TIMEOUT_MS = 180000; // 3 minutes timeout
 /**
  * Executes a Bright Data Scraper Studio collector safely via execFile argument arrays.
  * Guarantees that untrusted strings are never passed through shell string concatenation.
+ * Direct Node execution of @brightdata/cli ensures shell: false on all platforms.
  */
 export async function executeCollectorCli(
   collectorId: string,
@@ -42,12 +44,12 @@ export async function executeCollectorCli(
   options: RunnerOptions = {}
 ): Promise<CliExecutionOutput> {
   return new Promise((resolve) => {
-    const isWindows = process.platform === 'win32';
-    
-    // On Windows, .cmd files require shell: true or cmd.exe wrapper (Node.js CVE-2024-27980)
-    // Standing Rule 1: We still supply arguments as an array to prevent shell injection.
-    const binary = isWindows ? 'npx.cmd' : 'npx';
-    const args = ['-p', '@brightdata/cli', 'bdata', 'scraper', 'run', collectorId, targetUrl, '--pretty'];
+    const cliJsPath = resolveBdataCliBinary();
+    const isDirectNode = cliJsPath.endsWith('.js');
+    const binary = isDirectNode ? process.execPath : cliJsPath;
+    const args = isDirectNode
+      ? [cliJsPath, 'scraper', 'run', collectorId, targetUrl, '--pretty']
+      : ['scraper', 'run', collectorId, targetUrl, '--pretty'];
 
     const child = execFile(
       binary,
@@ -55,7 +57,8 @@ export async function executeCollectorCli(
       {
         timeout: options.timeoutMs || DEFAULT_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-        shell: isWindows, // Safe with argument arrays
+        shell: false, // Strict: Zero shell interpolation on all platforms
+        cwd: process.cwd(),
         env: {
           ...process.env,
           ...options.customEnv,

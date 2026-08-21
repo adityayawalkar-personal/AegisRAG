@@ -2,8 +2,22 @@
 
 function getAuthHeader() {
   const input = document.getElementById('apiKeyInput');
-  return input ? input.value.trim() : 'aegisrag-secret-token-2026';
+  if (input && input.value.trim()) {
+    localStorage.setItem('aegis_auth_token', input.value.trim());
+    return input.value.trim();
+  }
+  const cached = localStorage.getItem('aegis_auth_token');
+  return cached ? cached.trim() : '';
 }
+
+// Restore cached key to input field on load
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('apiKeyInput');
+  const cached = localStorage.getItem('aegis_auth_token');
+  if (input && cached) {
+    input.value = cached;
+  }
+});
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -61,18 +75,21 @@ chatForm.addEventListener('submit', async (e) => {
   const loadingMsgId = appendMessage('bot', '<em>Searching hybrid vector + BM25 index and generating verified answer...</em>');
 
   try {
+    const token = getAuthHeader();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['x-api-key'] = token;
+    }
+
     const res = await fetch('/api/query', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': getAuthHeader(),
-      },
+      headers,
       body: JSON.stringify({ query }),
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      updateMessage(loadingMsgId, `⚠️ Query Error (${res.status}): ${escapeHtml(err.message || 'Request failed')}`);
+      const err = await res.json().catch(() => ({ message: 'HTTP Error ' + res.status }));
+      updateMessage(loadingMsgId, `⚠️ Query Error (${res.status}): ${escapeHtml(err.message || 'Request failed. Check API Auth Secret in header.')}`);
       return;
     }
 

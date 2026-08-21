@@ -30,7 +30,7 @@
   "author": "Aditya Yawalkar",
   "license": "MIT",
   "dependencies": {
-    "@brightdata/cli": "1.2.0",
+    "@brightdata/cli": "0.3.5",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
     "better-sqlite3": "^13.0.3",

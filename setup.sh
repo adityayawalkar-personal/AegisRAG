@@ -16,7 +16,10 @@ echo "✓ Node.js $(node -v) detected."
 if [ ! -f .env ]; then
     echo "-> Creating .env from .env.example..."
     cp .env.example .env
-    echo "✓ .env created with default development configuration."
+    # Generate random API Auth Secret
+    RANDOM_SECRET=$(node -e "console.log(require('crypto').randomBytes(24).toString('hex'))")
+    sed -i "s/your_secure_random_token_here/${RANDOM_SECRET}/g" .env
+    echo "✓ .env created with freshly generated secure API_AUTH_SECRET."
 else
     echo "✓ .env configuration already present."
 fi

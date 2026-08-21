@@ -15,7 +15,8 @@ echo [OK] Node.js detected.
 if not exist .env (
     echo [INFO] Creating .env from .env.example...
     copy .env.example .env >nul
-    echo [OK] .env created with default development configuration.
+    node -e "const fs = require('fs'); const crypto = require('crypto'); let content = fs.readFileSync('.env', 'utf8'); content = content.replace('your_secure_random_token_here', crypto.randomBytes(24).toString('hex')); fs.writeFileSync('.env', content);"
+    echo [OK] .env created with freshly generated secure API_AUTH_SECRET.
 ) else (
     echo [OK] .env configuration already present.
 )
