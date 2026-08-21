@@ -57,3 +57,13 @@ This document records the rationale behind core design and architecture decision
 - **Prompt Injection Defense Boundary**: Sandboxed all retrieved web text inside `<RETRIEVED_CONTEXT>` blocks with explicit system instructions to treat content strictly as passive reference data.
 - **Deterministic Citation Verification**: Enforced factual claim attribution by regex-verifying inline `[Source: <url> | Last Verified: <iso_date>]` markers. Uncited statements trigger a strict re-citation pass; out-of-domain queries trigger explicit insufficiency refusals rather than speculative hallucination.
 - **Comprehensive Security Hardening**: Gated all mutating API endpoints (`/api/query`, `/api/trigger-run`, `/api/heal/approve`, `/api/heal/reject`) with `API_AUTH_SECRET` bearer token validation. Escaped and sanitized all rendered text across the dashboard (Chat, Health Console, Incident Replay) against XSS vulnerabilities.
+
+---
+
+### Day 7 & Hardening Audit (Aug 23, 2026) — Security Hardening, Concurrency Locking & Direct Node Invocation
+
+- **Direct Node Execution Without Shell (`shell: false`)**: Replaced `npx.cmd` and `shell: isWindows` with direct `process.execPath` resolution targeting `@brightdata/cli/dist/index.js`. Guarantees `shell: false` across Windows, macOS, and Linux, eliminating `cmd.exe` argument-reinterpretation and shell injection vulnerabilities.
+- **Real Published Dependency Pinning (`@brightdata/cli@0.3.5`)**: Corrected package version to the real published npm release `0.3.5`, guaranteeing zero-friction clean-checkout installation.
+- **Collector Concurrency Mutex Locking**: Added an in-memory mutex set (`activeHealLocks`) keyed by `collector_id` in `initiateHeal()`. Blocks race conditions where overlapping triggers on the same collector could execute parallel heals before state transitions take effect.
+- **Strict Startup Auth Secret Validation**: Eliminated all public hardcoded default token fallbacks. The server now immediately throws on startup (`getAuthSecret()`) if `API_AUTH_SECRET` is unset or empty, and setup scripts automatically generate secure random tokens.
+- **Strict XML Framing in Gemma Diagnosis Prompts**: Wrapped all dynamic diagnostic fields (`<TARGET_URL>`, `<FAILED_FIELDS>`, `<DIAGNOSTIC_SUMMARY>`, `<EXPECTED_SCHEMA_FIELDS>`) in strict XML tags with explicit system directives enforcing passive reference data treatment.

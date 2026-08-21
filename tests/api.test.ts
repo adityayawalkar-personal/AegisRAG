@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { AddressInfo } from 'node:net';
 import { createServer } from '../src/server/app.js';
 import { initSchema, insertRawRun, insertRunStatus, type RawRunRecord, type RunStatusRecord } from '../src/db/database.js';
-import { API_AUTH_SECRET } from '../src/server/auth.js';
+import { getAuthSecret } from '../src/server/auth.js';
 
 describe('Server REST API Endpoints & Auth Gate', () => {
   let db: ReturnType<typeof Database>;
@@ -11,6 +11,8 @@ describe('Server REST API Endpoints & Auth Gate', () => {
   let baseUrl: string;
 
   beforeEach(async () => {
+    process.env.API_AUTH_SECRET = 'test-token-secret-12345';
+
     db = new Database(':memory:');
     initSchema(db);
 
@@ -86,7 +88,7 @@ describe('Server REST API Endpoints & Auth Gate', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': API_AUTH_SECRET,
+        'x-api-key': getAuthSecret(),
       },
       body: JSON.stringify({ query: 'Tell me about test/repo' }),
     });

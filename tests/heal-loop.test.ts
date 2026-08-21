@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import { initiateHeal, approveHeal, rejectHeal } from '../src/healing/heal-loop.js';
+import { initiateHeal, approveHeal, rejectHeal, HealInProgressError } from '../src/healing/heal-loop.js';
 import { CircuitBreaker, CircuitBreakerTrippedError } from '../src/healing/circuit-breaker.js';
 import { initSchema, insertRawRun, type RawRunRecord } from '../src/db/database.js';
 import { type SentinelReport } from '../src/sentinel/types.js';
@@ -103,6 +103,35 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
     const breaker = new CircuitBreaker(db);
     expect(breaker.getState('c_heal_test_collector').status).toBe('RECOVERED');
     expect(breaker.getState('c_heal_test_collector').consecutive_failures).toBe(0);
+  });
+
+  it('blocks concurrent heal executions on the same collector with HealInProgressError', async () => {
+    let resolveCli: (value: { stdout: string; stderr: string; exitCode: number }) => void;
+    const slowCliPromise = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+      resolveCli = resolve;
+    });
+
+    const mockCli = vi.fn().mockReturnValue(slowCliPromise);
+
+    // Start first heal (will pause awaiting slowCliPromise)
+    const healPromise1 = initiateHeal(mockRun, mockReport, { db, cliExecutor: mockCli });
+
+    // Attempt second overlapping heal on same collector -> must reject immediately with HealInProgressError
+    await expect(
+      initiateHeal(mockRun, mockReport, { db, cliExecutor: mockCli })
+    ).rejects.toThrow(HealInProgressError);
+
+    // Resolve first heal
+    resolveCli!({ stdout: JSON.stringify({ status: 'awaiting_approval' }), stderr: '', exitCode: 0 });
+    const res1 = await healPromise1;
+    expect(res1.status).toBe('AWAITING_APPROVAL');
+
+    // After first completes, subsequent heal call is allowed again
+    const healPromise3 = await initiateHeal(mockRun, mockReport, {
+      db,
+      cliExecutor: vi.fn().mockResolvedValue({ stdout: '{}', stderr: '', exitCode: 0 }),
+    });
+    expect(healPromise3.status).toBe('AWAITING_APPROVAL');
   });
 
   it('records circuit breaker strike on rejection and trips after 3 consecutive strikes', async () => {
