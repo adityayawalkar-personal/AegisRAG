@@ -20,7 +20,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -35,8 +35,5 @@ jobs:
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
-      - name: Run Vitest test suites (All 48 tests)
+      - name: Run Automated Test Suites
         run: npm test
-
-      - name: Verify Golden Run Fixture
-        run: npx vitest run tests/sentinel.test.ts -t "asserts sentinel.validate() returns HEALTHY against fixtures/golden-run.json"
