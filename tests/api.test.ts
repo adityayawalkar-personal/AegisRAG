@@ -45,10 +45,10 @@ describe('Server REST API Endpoints & Auth Gate', () => {
 
     server = createServer(db);
     await new Promise<void>((resolve) => {
-      server.listen(0, () => resolve());
+      server.listen(0, '127.0.0.1', () => resolve());
     });
     const addr = server.address() as AddressInfo;
-    baseUrl = `http://localhost:${addr.port}`;
+    baseUrl = `http://127.0.0.1:${addr.port}`;
   });
 
   afterEach(async () => {
