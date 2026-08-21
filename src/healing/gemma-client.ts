@@ -14,10 +14,12 @@ export interface GemmaDiagnosisResult {
   description: string;
   characterCount: number;
   isUnderLimit: boolean;
-  generatedBy: 'local_gemma_server' | 'deterministic_fallback';
+  generatedBy: 'local_gemma_server' | 'huggingface_inference' | 'deterministic_fallback';
 }
 
 const DEFAULT_GEMMA_ENDPOINT = process.env.GEMMA_ENDPOINT || 'http://localhost:8081/completion';
+const GEMMA_MODEL = process.env.GEMMA_MODEL || 'google/gemma-4-E2B-it';
+const HF_TOKEN = process.env.HF_TOKEN;
 const MAX_CHAR_LIMIT = 900;
 
 export async function generateHealDescription(
@@ -26,9 +28,10 @@ export async function generateHealDescription(
 ): Promise<GemmaDiagnosisResult> {
   const prompt = buildGemmaPrompt(request);
 
+  // 1. Attempt Local llama.cpp / Gemma Server
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -37,7 +40,7 @@ export async function generateHealDescription(
         prompt,
         n_predict: 200,
         temperature: 0.1,
-        stop: ['\n', 'Instruction:', 'Response:'],
+        stop: ['\n', 'Instruction:', 'Response:', '<end_of_turn>'],
       }),
       signal: controller.signal,
     });
@@ -60,10 +63,61 @@ export async function generateHealDescription(
       }
     }
   } catch {
-    // Local server offline or not ready — proceed to deterministic diagnosis
+    // Local server offline -> proceed to Hugging Face or deterministic fallback
   }
 
-  // Deterministic fallback rule-based diagnosis conforming strictly to < 900 chars
+  // 2. Attempt Hugging Face Inference API if HF_TOKEN is configured
+  if (HF_TOKEN) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+      const hfResponse = await fetch(`https://api-inference.huggingface.co/models/${encodeURIComponent(GEMMA_MODEL)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${HF_TOKEN}`,
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            max_new_tokens: 150,
+            temperature: 0.1,
+            return_full_text: false,
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (hfResponse.ok) {
+        const hfData = await hfResponse.json();
+        let rawGenerated = '';
+        if (Array.isArray(hfData) && hfData[0]?.generated_text) {
+          rawGenerated = hfData[0].generated_text;
+        } else if (typeof hfData === 'object' && hfData && 'generated_text' in hfData) {
+          rawGenerated = String((hfData as { generated_text: string }).generated_text);
+        }
+
+        if (rawGenerated.trim()) {
+          const cleaned = sanitizeSentence(rawGenerated);
+          if (cleaned.length > 0 && cleaned.length <= MAX_CHAR_LIMIT) {
+            return {
+              description: cleaned,
+              characterCount: cleaned.length,
+              isUnderLimit: true,
+              generatedBy: 'huggingface_inference',
+            };
+          }
+        }
+      }
+    } catch {
+      // HF Inference API offline / rate-limited -> proceed to deterministic fallback
+    }
+  }
+
+  // 3. Deterministic fallback rule-based diagnosis conforming strictly to < 900 chars
   const fallback = buildDeterministicDiagnosis(request);
   return {
     description: fallback,

@@ -10,6 +10,7 @@
     "runner": "tsx src/scraper-runner.ts",
     "seed": "tsx src/scripts/seed-history.ts",
     "demo": "tsx src/scripts/demo-walkthrough.ts",
+    "model:setup": "tsx src/scripts/download-model.ts",
     "verify:day2": "tsx src/scripts/verify-day2.ts",
     "verify:day3": "tsx src/scripts/verify-day3.ts",
     "verify:day4": "tsx src/scripts/verify-day4.ts",
