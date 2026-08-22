@@ -79,23 +79,30 @@ const DEFAULT_DB_PATH = path.join(DEFAULT_DB_DIR, 'aegisrag.db');
 
 let defaultDbInstance: DatabaseType | null = null;
 
-export function getDatabase(dbPath: string = DEFAULT_DB_PATH): DatabaseType {
-  if (dbPath === DEFAULT_DB_PATH && defaultDbInstance) {
+export function getDatabase(dbPath?: string): DatabaseType {
+  const isTest = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
+  const effectivePath = dbPath || (isTest ? ':memory:' : DEFAULT_DB_PATH);
+
+  if (effectivePath === DEFAULT_DB_PATH && defaultDbInstance) {
     return defaultDbInstance;
   }
 
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (effectivePath !== ':memory:') {
+    const dir = path.dirname(effectivePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
+  const db = new Database(effectivePath);
+  if (effectivePath !== ':memory:') {
+    db.pragma('journal_mode = WAL');
+  }
   db.pragma('foreign_keys = ON');
 
   initSchema(db);
 
-  if (dbPath === DEFAULT_DB_PATH) {
+  if (effectivePath === DEFAULT_DB_PATH) {
     defaultDbInstance = db;
   }
 
