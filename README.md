@@ -1,183 +1,213 @@
-# AegisRAG — Autonomous Self-Healing Knowledge Pipeline & Verifiable RAG
+# AegisRAG — Self-Healing Knowledge Pipeline & Verifiable RAG
+
+A continuous accuracy validation and self-healing extraction pipeline powered by Bright Data Scraper Studio and local Gemma 4 E2B.
 
 [![CI](https://github.com/adityayawalkar-personal/AegisRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/adityayawalkar-personal/AegisRAG/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![Bright Data](https://img.shields.io/badge/Bright_Data-Scraper_Studio-orange.svg)](https://brightdata.com/)
-[![Gemma](https://img.shields.io/badge/Model-Gemma_4_E2B-purple.svg)](https://ai.google.dev/gemma)
-
-> **A continuous accuracy validation and self-healing extraction pipeline that detects web schema drift, generates plain-language repair diagnoses via local Gemma LLMs, drives Bright Data Scraper Studio's generative AI healing with human-in-the-loop approval, and guarantees stale extractions are automatically purged from RAG vector and keyword indices.**
+[![Node Version](https://img.shields.io/badge/Node-%3E%3D20.12.0-blue.svg)](https://nodejs.org/)
+[![Tests](https://img.shields.io/badge/Tests-53%20Passing-success.svg)](https://github.com/adityayawalkar-personal/AegisRAG)
 
 ---
 
-## 🎯 Executive Summary & The Problem
+## 1. What This Is
 
-Standard Retrieval-Augmented Generation (RAG) systems silently fail when web targets update their DOM markup. Traditional scrapers extract `null` or malformed fields, polluting vector databases with hallucination-inducing noise.
-
-**AegisRAG** solves this with a closed-loop reliability architecture:
-1. **The Sentinel (Accuracy Layer)**: Continuously validates extractions against a rolling 5-run median baseline, catching subtle data drift, type violations, and bot walls (>50% duplicate rows).
-2. **Autonomous Gemma Diagnosis**: When schema corruption is detected (>20% field failure), a local Gemma 4 E2B model generates a single plain-language sentence (<900 chars) describing the broken elements.
-3. **Safe Bright Data Self-Healing**: Feeds the diagnosis into `bdata scraper heal` via direct Node binary execution with argument arrays, previews the regenerated extraction, and halts at a human-in-the-loop approval gate.
-4. **Collector Concurrency Locking**: Employs in-memory mutex locking keyed by `collector_id` to block race conditions and prevent concurrent heals from overlapping.
-5. **Self-Cleaning Knowledge Store**: Bumping schema versions atomically purges superseded extractions from both dense vector and Okapi BM25 indices, eliminating index drift.
-6. **Verifiable Hybrid Retrieval**: Combines semantic embeddings and BM25 via Reciprocal Rank Fusion (RRF, $k=60$), expands chunks to parent sections, and deterministically enforces inline source citations with verified timestamps.
+AegisRAG is a self-healing knowledge pipeline where a custom Bright Data Scraper Studio collector feeds an automated Sentinel validation layer that catches both missing and subtly wrong data. When schema drift or target website redesigns are detected, AegisRAG repairs itself via Bright Data's real `heal` &rarr; `approve` CLI cycle using a local Gemma 4 E2B model to generate the repair diagnosis sentence, verifies repaired rows against golden baselines, and powers a cited hybrid RAG system that stays honest about what it actually knows.
 
 ---
 
-## 🏛️ System Architecture
+## 2. The Problem
 
-AegisRAG is organized into four strictly decoupled architectural layers:
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                            PRESENTATION LAYER                                │
-│   • Next-Gen Dark Dashboard (Chat Q&A, Health Console, Incident Replay)     │
-│   • Authenticated REST API (POST /api/query, /api/trigger-run, /api/heal)   │
-└──────────────────────────────────────┬───────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼───────────────────────────────────────┐
-│                            APPLICATION LAYER                                 │
-│   • The Sentinel (Accuracy Validator, Rolling Median Baseline Engine)        │
-│   • The Self-Healing Loop (Gemma Diagnosis, CLI Wrappers, Concurrency Lock)  │
-│   • RAG Service (Prompt Sandboxing, Citation Verification, Refusal Gate)     │
-└──────────────────────────────────────┬───────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼───────────────────────────────────────┐
-│                              DOMAIN LAYER                                    │
-│   • Multi-Source Registry & Zod Schemas (sources.json, sources.ts)           │
-│   • Collector State Machine (HEALTHY → DEGRADED → HEALING → RECOVERED)      │
-│   • 3-Strike Circuit Breaker (Locks to DEGRADED_PERMANENT on 3 failures)     │
-│   • Structure-Preserving Chunker (~500 tokens / 100 overlap / parent_id)     │
-│   • Pre-Embedding PII Filter (Emails, Phones, SSNs Redacted with Logging)    │
-│   • Okapi BM25 Sparse Search Engine (k1 = 1.2, b = 0.75)                     │
-└──────────────────────────────────────┬───────────────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼───────────────────────────────────────┐
-│                         INFRASTRUCTURE LAYER                                 │
-│   • Bright Data Scraper Studio CLI (@brightdata/cli@0.3.5)                   │
-│   • Direct Node Binary Resolution (Zero Shell / cmd.exe Interpolation)       │
-│   • Local Gemma 4 E2B Inference Server (8-bit GGUF via llama.cpp on :8081)   │
-│   • Embedded SQLite Transactional Database (better-sqlite3 in WAL mode)      │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+Web scrapers break silently when target sites redesign their DOM layouts. A broken scraper does not always look broken—it often returns well-typed, non-null data that is subtly wrong (such as scraping author bios into repository descriptions or grabbing outdated cached cards). This silent corruption is far more dangerous than an outright HTTP crash because downstream systems don't notice the break until a retrieval model confidently hallucinates from corrupted context in front of users.
 
 ---
 
-## 💻 Platform Support
+## 3. Architecture
 
-- **Primary Tier**: Linux (Ubuntu 20.04+, Debian, Fedora, Alpine) and macOS (Apple Silicon & Intel).
-- **Secondary Tier (Windows)**: Windows 10/11 is fully supported through direct `process.execPath` execution of the `@brightdata/cli` JavaScript distribution, enforcing `shell: false` across all platforms to eliminate `cmd.exe` argument-reinterpretation and shell-injection risks.
-
----
-
-## 🛠️ How Bright Data Scraper Studio is Used
-
-Bright Data's **Scraper Studio** provides generative AI-powered web scraper creation, execution, and dynamic healing. AegisRAG integrates with Scraper Studio through safe CLI wrappers:
-
-### 1. CLI Commands Utilized
-- `bdata scraper create "<prompt>" --url <target_url>`: Initializes a cloud scraper collector targeting web feeds.
-- `bdata scraper run <collector_id> <target_url> --pretty`: Executes live web extractions and returns structured JSON payloads.
-- `bdata scraper heal <collector_id> "<gemma_description>" --url <target_url> --pretty`: Feeds Gemma's plain-language diagnosis to Scraper Studio's generative AI to synthesize updated CSS selectors and browser automation logic.
-- `bdata scraper approve <collector_id>`: Manually promotes a previewed heal to live production scraper status.
-- `bdata scraper approve <collector_id> --reject`: Rejects a flawed heal, recording a strike against the circuit breaker.
-
-### 2. AI Agent vs. Hand-Written Division of Labor
-| Subsystem | What Bright Data Scraper Studio Generates | What We Built by Hand |
-| :--- | :--- | :--- |
-| **Web Scraping** | Dynamic browser execution scripts, CSS/XPath selector synthesis, CAPTCHA bypass, and cloud proxies. | CLI process isolation runner (`scraper-runner.ts`), timeout/429 transient retry handlers, and SQLite raw logging. |
-| **Validation & Healing** | Interactive code repair candidates (`preview_result` envelope). | **The Sentinel** validation engine, 5-run median baseline comparison, 20% noise threshold, Gemma diagnosis prompt client, concurrency mutex lock, 3-strike circuit breaker, and state machine. |
-| **RAG Knowledge Base** | N/A | Structure-preserving hierarchical chunker, PII redaction filter, Okapi BM25 index, schema invalidation purger, and RRF hybrid retrieval. |
-
-### 3. The Self-Healing Pipeline Sequence
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Target as Target Web Page
-    participant Runner as Scraper Runner
-    participant BD as Bright Data Studio
-    participant Sentinel as The Sentinel
-    participant Gemma as Local Gemma LLM
-    participant Operator as Operator (Approval Gate)
-    participant Store as Vector & BM25 Store
+flowchart TD
+    subgraph STAGE_1["Stage 1: Ingestion, Validation & Self-Healing Pipeline"]
+        Target["Target Web Source\n(e.g., https://github.com/trending)"] --> Collector["Bright Data Scraper Studio Collector\n(ID: c_msytsxke2c5eegz5we)"]
+        Collector --> Runner["Scraper Runner\n(src/scraper-runner.ts)"]
+        Runner --> Sentinel["The Sentinel Validation Engine\n(src/sentinel/sentinel.ts)"]
+        
+        Sentinel --> TypeRule["Type & Range Rule\n(src/sentinel/rules/type-range-rule.ts)"]
+        Sentinel --> BaselineRule["Rolling 5-Run Median Baseline\n(src/sentinel/rules/baseline-drift-rule.ts)"]
+        Sentinel --> SoftFailRule["Soft-Failure & Bot-Wall Detection\n(src/sentinel/rules/soft-failure-rule.ts)"]
+        
+        Sentinel --> StatusDecision{"Sentinel Status\nEvaluation"}
+        
+        StatusDecision -- "SOFT_FAILURE / CAPTCHA" --> BlockedHandler["Classify as BLOCKED\n(src/healing/failure-classifier.ts)\nBypass Heal → Retry / Rotate Proxy"]
+        StatusDecision -- "SCHEMA_CORRUPTED\n(>20% Field Failure)" --> GemmaDiagnosis["Local Gemma 4 E2B LLM\n(src/healing/gemma-client.ts)\nPlain-Language Diagnosis <900 chars"]
+        
+        GemmaDiagnosis --> HealExec["bdata scraper heal\n(src/healing/heal-loop.ts)"]
+        HealExec --> ApprovalGate["Operator Approval Gate\n(Manual approve / reject)"]
+        ApprovalGate -- "approveHeal()" --> GoldenGate["Golden-Row Verification Gate\n(src/healing/golden-comparison.ts)\nExact Match & 20% Variance Band"]
+        
+        GoldenGate -- "Tolerance Breached" --> DegradedHold["Hold Collector in DEGRADED\nFeed Feedback to Next Gemma Attempt"]
+        DegradedHold --> GemmaDiagnosis
+        
+        GoldenGate -- "Verified Compliant" --> RecoveredState["Transition to RECOVERED\n(src/healing/state-machine.ts)"]
+    end
 
-    Runner->>BD: bdata scraper run (safe direct Node execFile)
-    BD->>Target: Web Extraction
-    Target-->>BD: HTML Content
-    BD-->>Runner: Extracted JSON Rows
-    Runner->>Sentinel: Validate(rows, 5-run baseline)
-    alt Extraction Corrupted (>20% Failure)
-        Sentinel-->>Runner: Status = SCHEMA_CORRUPTED
-        Runner->>Gemma: Generate Diagnosis (<900 chars)
-        Gemma-->>Runner: "DOM layout redesigned for [fields]..."
-        Runner->>BD: bdata scraper heal <collector_id> "<diagnosis>"
-        BD-->>Runner: awaiting_approval envelope & preview_result
-        Runner->>Operator: Present Preview in Health Console
-        Operator->>Runner: approveHeal(attemptId)
-        Runner->>BD: bdata scraper approve <collector_id>
-        Runner->>Store: Ingest Healthy Run (Schema v2)
-        Store->>Store: 🧹 Purge Superseded Schema v1 Chunks
-    else Extraction Healthy
-        Sentinel-->>Runner: Status = HEALTHY
-        Runner->>Store: Ingest Healthy Run (Schema v1)
+    subgraph STAGE_2["Stage 2: Structure-Preserving Indexing & Verifiable RAG"]
+        StatusDecision -- "HEALTHY (1st Run)" --> GoldenSnapshot["Snapshot into golden_rows Table\n(src/db/database.ts)"]
+        GoldenSnapshot --> Chunking["Hierarchical Chunker\n(src/indexing/chunking.ts)\n~500 tokens / 100 overlap / parent_id"]
+        RecoveredState --> Chunking
+        
+        Chunking --> PII["PII Redaction Filter\n(src/indexing/pii-filter.ts)"]
+        PII --> SchemaPurge["Self-Cleaning Stale Purge\n(Purge Chunks where version < currentVersion)"]
+        SchemaPurge --> DualIndex["Dual Hybrid Store\n(src/indexing/index-store.ts)"]
+        
+        DualIndex --> DenseVector["In-Memory Dense Vector Store"]
+        DualIndex --> SparseBM25["Okapi BM25 Keyword Engine\n(src/indexing/bm25.ts)"]
+        
+        UserQuery["User RAG Query\n(POST /api/query)"] --> HybridRetriever["Hybrid Retrieval with RRF (k=60)\n(src/retrieval/retrieve.ts)"]
+        DenseVector --> HybridRetriever
+        SparseBM25 --> HybridRetriever
+        
+        HybridRetriever --> ParentExpansion["Parent-Section Context Expansion\n(src/retrieval/rag-service.ts)"]
+        ParentExpansion --> PromptSandbox["Sandboxed RAG Prompt\n(Passive Reference Block)"]
+        PromptSandbox --> CitationVerifier["Deterministic Citation Checker\n(Regex URL & Timestamp Validation)"]
+        CitationVerifier --> FinalAnswer["Attributed Answer or Refusal\n(UI Chat & API Response)"]
     end
 ```
 
 ---
 
-## 🚀 Quick Start & Setup
+## 4. How Bright Data Scraper Studio is Used
 
-### Prerequisites
-- **Node.js**: v18.20+ or v20.12+
-- **Bright Data API Key** (Configured in `.env`)
-- **API_AUTH_SECRET** (Generated on setup or configured in `.env`)
+Bright Data's **Scraper Studio** provides browser automation, cloud execution, and generative AI selector synthesis. AegisRAG drives Scraper Studio via direct Node CLI execution (`@brightdata/cli@0.3.5`) conforming to argument-array safety (`shell: false`).
 
-### One-Command Setup
-Clone the repository and run the automated setup script:
+### 1. CLI Commands Executed
+- `bdata scraper create "<prompt>" --url <target_url>`: Initializes new scrapers with target endpoints.
+- `bdata scraper run <collector_id> <target_url> --pretty`: Executes extraction jobs and outputs structured JSON rows.
+- `bdata scraper heal <collector_id> "<gemma_description>" --url <target_url> --pretty`: Dispatches Gemma's natural-language repair description to Scraper Studio's generative AI to synthesize updated CSS/XPath selectors.
+- `bdata scraper approve <collector_id>`: Applies previewed selector updates to the production collector.
+- `bdata scraper approve <collector_id> --reject`: Rejects a candidate repair, logging a strike against the 3-strike circuit breaker.
 
+### 2. Collector Reference
+- **Active Collector ID**: `c_msytsxke2c5eegz5we` (Configured in [`config/sources.json`](file:///config/sources.json) targeting `https://github.com/trending`).
+
+### 3. AI Agent vs. Hand-Written Division of Labor
+| Subsystem | What Bright Data Scraper Studio Generates | What We Built by Hand |
+| :--- | :--- | :--- |
+| **Extraction Engine** | Dynamic selector synthesis, cloud browser instances, proxy rotation, and extraction scripts. | Safe direct CLI execution runner ([`src/scraper-runner.ts`](file:///src/scraper-runner.ts)), timeout handling, and SQLite raw run logging. |
+| **Validation & Healing** | Interactive code repair candidates (`preview_result` payload). | **The Sentinel** validation engine, 5-run rolling median baselines, `BLOCKED` classification, Gemma diagnosis client, golden-row tolerance gating, 3-strike circuit breaker, and state machine. |
+| **RAG Knowledge Base** | N/A | Structure-preserving hierarchical chunker, PII redaction filter, Okapi BM25 engine, automatic stale-chunk purging on schema version bumps, and RRF hybrid retrieval. |
+
+---
+
+## 5. What Makes This Different From Just Calling `bdata scraper heal`
+
+### (a) Baseline + Soft-Failure Detection & `BLOCKED` Classification
+Comparing extractions against a single prior run is brittle because a single anomalous run can skew the comparison. The Sentinel computes a rolling median across the last 5 successful runs, catching subtle null-rate expansions and field-length collapse that static schemas ignore. Furthermore, token-overlap clustering detects CAPTCHAs, bot walls, and Cloudflare challenge pages returning HTTP 200/403. Instead of misidentifying a CAPTCHA as a layout redesign (which would waste credits and corrupt working selectors), the failure classifier assigns the `BLOCKED` category, bypassing `initiateHeal()` entirely and routing to proxy rotation and retry backoff.
+
+### (b) Golden-Row Verification & Post-Heal Tolerance Gating
+A repaired scraper can pass every Sentinel type check (e.g., returning non-null strings) and still extract semantically wrong data (e.g., extracting an author handle into the repo name). When a collector first achieves `HEALTHY` status, its verified rows are snapshotted into the SQLite `golden_rows` table. After `approveHeal()` executes, AegisRAG runs an automated second check comparing verified rows field-by-field:
+- **Strings, enums, and URLs**: Require strict exact equality.
+- **Dynamic numeric metrics**: Evaluated against a 20% variance band to allow natural web changes while catching semantic errors.
+
+If a field breaches tolerance, the collector is held in `DEGRADED` (transition to `RECOVERED` is blocked), and the discrepancy details are injected directly into the next Gemma repair prompt via `<GOLDEN_DISCREPANCIES>` context tags.
+
+#### Golden Snapshot Field Coverage Transparency
+| Schema Field | Field Type | Golden Verification Coverage | Verification Policy |
+| :--- | :--- | :--- | :--- |
+| `product_page_url` | `url` | **100% Covered** (`golden_rows` / `golden-run.json`) | Strict URL equality |
+| `trending_repositories`| `array` | **100% Covered** (`golden_rows` / `golden-run.json`) | Array length & entry exact match |
+| `repo_name` | `string` | **100% Covered** (Golden fixture baseline) | Strict string equality |
+| `author` | `string` | **100% Covered** (Golden fixture baseline) | Strict string equality |
+| `description` | `string` | **100% Covered** (Golden fixture baseline) | Strict string equality |
+| `stars_today` | `string/numeric`| **100% Covered** (Golden fixture baseline) | 20% numeric variance band |
+| `total_stars` | `string/numeric`| **100% Covered** (Golden fixture baseline) | 20% numeric variance band |
+| `dynamic_user_tags` | `array` | **Uncovered (No baseline)** | Transparently logged as uncovered in UI |
+
+### (c) Diagnosis Generation Provenance Tracking
+In automated systems, diagnosing failures with black-box fallbacks hides whether an AI model actually understood the error. AegisRAG persists the computed generation tier (`generated_by`) into SQLite and renders color-coded provenance badges across the Health Console and Incident Replay:
+- 🟢 **`Local Gemma 4 E2B`**: Generated by local `llama.cpp` server on port 8081.
+- 🟡 **`HF Inference (cloud fallback)`**: Generated by Hugging Face cloud Inference API.
+- 🔴 **`Deterministic fallback`**: Generated by rule-based template when LLM inference is unreachable.
+
+---
+
+## 6. Technology Stack by Architectural Layer
+
+| Layer | Technology | Why Selected |
+| :--- | :--- | :--- |
+| **Presentation** | Vanilla HTML5 / CSS3 / JavaScript | High performance, zero framework bundle overhead, dark-theme dashboard, XSS-sanitized rendering. |
+| **Application** | TypeScript 5.x & Node.js 20+ | End-to-end type safety, native asynchronous child process management, decoupled service modules. |
+| **Accuracy Layer** | Sentinel Validator & Dice Similarity | Modular rule interface conforming to `(rows, baseline, config) => RuleResult`, token-overlap clustering for bot detection. |
+| **Domain Layer** | Zod Schema Validation & Finite State Machine | Strict runtime schema enforcement for multi-source configs, formal collector lifecycle state graph. |
+| **Infrastructure (DB)**| `better-sqlite3` (WAL Mode) | Synchronous transactional execution, sub-millisecond local reads, embedded zero-network reliance. |
+| **Infrastructure (Scraper)**| Bright Data CLI (`@brightdata/cli@0.3.5`) | Direct Node binary execution (`shell: false`), argument-array command isolation, AI selector healing. |
+| **Infrastructure (LLM)**| Gemma 4 E2B (8-bit GGUF via `llama.cpp`) | Private, local on-device inference producing constrained (<900 char) natural language repair descriptions. |
+| **Infrastructure (Search)**| Dense In-Memory Vectors + Okapi BM25 | Hybrid sparse-dense search fused via Reciprocal Rank Fusion ($k=60$) with parent chunk expansion. |
+
+---
+
+## 7. Dashboard & Health Console Visuals
+
+<!-- Note for maintainers: Capture live screenshots prior to submission into docs/screenshots/ -->
+
+| System View | Preview | Description |
+| :--- | :--- | :--- |
+| **Chat & Verified Citations** | ![Chat Tab](docs/screenshots/chat.png) | Interactive chat showing attributed RAG answer with inline source URL and verified timestamp badges. |
+| **Health Console & Active Heal** | ![Health Console](docs/screenshots/health-console.png) | Real-time collector status card, circuit breaker strike counters, and pending heal card with the Gemma provenance badge. |
+| **Incident Replay Timeline** | ![Incident Replay](docs/screenshots/incident-replay.png) | Chronological incident audit trail rendering scrape runs, Sentinel corruption alerts, and golden verification results. |
+
+---
+
+## 8. Setup & Installation
+
+Follow these numbered steps to run the complete repository locally:
+
+### Step 1: Clone Repository
 ```bash
-# Clone repository
 git clone https://github.com/adityayawalkar-personal/AegisRAG.git
 cd AegisRAG
-
-# Linux / macOS / Git Bash
-chmod +x setup.sh
-./setup.sh
-
-# Windows (Command Prompt / PowerShell)
-setup.bat
 ```
 
-The setup script automatically:
-1. Provisions `.env` from `.env.example` and generates a secure random `API_AUTH_SECRET`.
-2. Creates the `data/` directory.
-3. Installs pinned dependencies (`npm install`).
-4. Seeds 5+ historical baseline runs into SQLite (`npm run seed`).
-5. Runs the full test suite (48 tests).
-6. Starts the API server & Dashboard on `http://localhost:3001`.
-
-### Key CLI Commands
+### Step 2: Install Dependencies
 ```bash
-# Start Interactive Dashboard & REST API
+npm install
+```
+
+### Step 3: Configure Environment Variables
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Fill in your configuration values:
+- `BRIGHTDATA_API_KEY`: Obtain from [Bright Data Control Panel](https://brightdata.com/cp).
+- `API_AUTH_SECRET`: A secure random token for dashboard and API authentication.
+- `HF_TOKEN`: (Optional) Read token from [Hugging Face Tokens](https://huggingface.co/settings/tokens) for cloud fallback.
+- `PORT`: `3001` (default).
+
+### Step 4: Setup Local Gemma Model (Optional for local inference)
+```bash
+npm run model:setup
+```
+
+### Step 5: Start API & Dashboard Server
+```bash
 npm run server
+```
+- Dashboard UI: `http://localhost:3001`
+- Telemetry & Health Check: `http://localhost:3001/api/health`
 
-# Run End-to-End Sabotage & Self-Healing Walkthrough Demo
-npm run demo
-
-# Run Full Vitest Test Suite (48 tests)
-npm test
-
-# Run TypeScript Typecheck
-npm run typecheck
-
-# Run Single Scraper Extraction Loop
+### Step 6: Run Scraper Extraction or Full Demo
+```bash
+# Execute scraper runner against target
 npm run runner
+
+# Or run the complete 7-stage end-to-end sabotage & recovery walkthrough
+npm run demo
 ```
 
 ---
 
-## 📊 Live Extraction Schema & Sample Output
+## 9. Example Structured Extraction Output
 
-AegisRAG targets dynamic developer trends and feeds (`https://github.com/trending` with collector `c_msytsxke2c5eegz5we`).
+Extracted structured data conforming to [`config/sources.json`](file:///config/sources.json):
 
 ```json
 [
@@ -185,74 +215,78 @@ AegisRAG targets dynamic developer trends and feeds (`https://github.com/trendin
     "repo_name": "facebook/react",
     "author": "facebook",
     "description": "The library for web and native user interfaces.",
-    "stars_today": "1,200 stars today",
-    "total_stars": "235,000",
+    "stars_today": "112 stars today",
+    "total_stars": "228,100",
     "language": "JavaScript",
-    "url": "https://github.com/facebook/react"
-  },
-  {
-    "repo_name": "vercel/next.js",
-    "author": "vercel",
-    "description": "The React Framework for the Web.",
-    "stars_today": "850 stars today",
-    "total_stars": "128,000",
-    "language": "TypeScript",
-    "url": "https://github.com/vercel/next.js"
+    "url": "https://github.com/facebook/react",
+    "product_page_url": "https://github.com/facebook/react",
+    "trending_repositories": [
+      "facebook/react",
+      "vercel/next.js"
+    ]
   }
 ]
 ```
 
 ---
 
-## 🤖 AI Tool-Use & Authorship Disclosure
+## 10. Testing & Verification Audit Trail
 
-In the spirit of transparent engineering, the following table details the authorship and generation method for each module:
+AegisRAG includes 53 unit and integration tests across 13 test suites and a verifiable day-by-day audit trail:
 
-| File / Module | Authorship Category | Description & Human Customization |
+```bash
+# Run full automated test suite (53 passing tests)
+npm test
+
+# Run TypeScript compilation check (0 errors)
+npm run typecheck
+```
+
+### Reproducible Milestone Scripts
+Judges can verify each subsystem independently using dedicated audit scripts:
+- `npm run verify:day2`: Verifies SQLite schema persistence, error isolation, and Zod configuration loading.
+- `npm run verify:day3`: Exercises Sentinel multi-rule validation, 5-run median calculation, and 20% noise threshold.
+- `npm run verify:day4`: Tests Gemma prompt construction, circuit breaker strike progression, and CLI argument safety.
+- `npm run verify:day5`: Tests hierarchical chunking, PII redaction, Okapi BM25 indexing, and stale chunk invalidation.
+- `npm run verify:day6`: Tests hybrid RRF retrieval, deterministic citation verification, and unauthorized query rejection.
+- `npm run demo`: Complete 7-stage live sabotage simulation, local Gemma repair, operator approval, and knowledge base recovery.
+
+---
+
+## 11. AI Tool-Use & Authorship Disclosure
+
+| File / Module | Authorship Category | Human Design & Implementation Role |
 | :--- | :--- | :--- |
-| `src/sentinel/sentinel.ts` | **Heavily Edited by Us** | Modular rule aggregator enforcing the 20% corruption threshold and SQLite reporting. |
-| `src/sentinel/rules/*.ts` | **Hand-Written by Us** | Four standalone validation rules (type/range, 5-run median baseline, soft-failure clustering, structured data cross-check). |
-| `src/sentinel/similarity.ts` | **Hand-Written by Us** | Pure TypeScript Dice similarity and token-overlap duplicate clustering for CAPTCHA wall detection. |
-| `src/healing/state-machine.ts`| **Hand-Written by Us** | Formal state transition graph (`HEALTHY → DEGRADED → HEALING → RECOVERED → DEGRADED_PERMANENT`). |
-| `src/healing/circuit-breaker.ts`| **Hand-Written by Us** | 3-strike failure tracking and lockout protection. |
-| `src/healing/failure-classifier.ts`| **Hand-Written by Us** | Smart retry router with exponential backoff on 429/5xx/timeouts before healing. |
-| `src/healing/gemma-client.ts` | **Heavily Edited by Us** | Local Gemma inference client enforcing single-sentence <900 character repair prompts with XML delimiter framing. |
-| `src/healing/heal-loop.ts` | **Hand-Written by Us** | Safe direct Node CLI wrappers (`shell: false`), collector concurrency mutex locking, with manual `approveHeal`/`rejectHeal` gates. |
-| `src/indexing/chunking.ts` | **Hand-Written by Us** | Structure-preserving hierarchical section parser (~500 tokens / 100 overlap). |
-| `src/indexing/pii-filter.ts` | **Hand-Written by Us** | Regex PII redaction (email, phone, SSN) before embedding. |
-| `src/indexing/bm25.ts` | **Hand-Written by Us** | Pure TypeScript Okapi BM25 keyword search engine. |
-| `src/indexing/index-store.ts` | **Hand-Written by Us** | Dual store manager with Sentinel quality gate and automatic stale-chunk purging. |
-| `src/retrieval/retrieve.ts` | **Hand-Written by Us** | Parallel vector + BM25 search with Reciprocal Rank Fusion (RRF) and parent expansion. |
-| `src/retrieval/rag-service.ts`| **Hand-Written by Us** | Sandboxed prompt template and deterministic post-generation citation verification. |
-| `src/server/app.ts` & `auth.ts` | **Hand-Written by Us** | Native Node.js REST API with strict startup secret validation (`getAuthSecret()`). |
-| `public/*` | **Heavily Edited by Us** | Modern dark-theme dashboard (Chat, Health Console, Incident Replay) with XSS sanitization and client-side token caching. |
-| `tests/*.test.ts` (13 suites) | **Heavily Edited by Us** | 48 automated unit tests covering all edge cases, synthetic failures, concurrency locking, and RAG pipelines. |
+| `src/sentinel/sentinel.ts` | **Heavily Edited by Us** | Designed the 20% noise threshold gate, baseline median comparison, and database reporting. |
+| `src/sentinel/rules/*.ts` | **Hand-Written by Us** | Implemented modular validation rule interfaces (`type-range`, `baseline-drift`, `soft-failure`, `structured-data`). |
+| `src/healing/failure-classifier.ts`| **Hand-Written by Us** | Built anti-bot `BLOCKED` classification and exponential backoff retry handler for 429/5xx errors. |
+| `src/healing/golden-comparison.ts`| **Hand-Written by Us** | Authored field-level golden snapshot comparison, numeric tolerance bands (20%), and coverage breakdown. |
+| `src/healing/circuit-breaker.ts`| **Hand-Written by Us** | Implemented 3-strike state machine and permanent degradation lockout protection. |
+| `src/healing/gemma-client.ts` | **Heavily Edited by Us** | Prompt engineering for local Gemma 4 E2B inference, character length (<900 char) enforcement, and XML sandboxing. |
+| `src/healing/heal-loop.ts` | **Hand-Written by Us** | Implemented direct Node CLI execution (`shell: false`), collector mutex lock, and operator approval gate. |
+| `src/indexing/chunking.ts` | **Hand-Written by Us** | Hierarchical document section parser with parent pointer preservation (~500 tokens / 100 overlap). |
+| `src/indexing/pii-filter.ts` | **Hand-Written by Us** | Pre-embedding regex sanitizer for emails, phone numbers, and SSNs. |
+| `src/indexing/bm25.ts` | **Hand-Written by Us** | Pure TypeScript implementation of the Okapi BM25 sparse keyword ranking algorithm. |
+| `src/indexing/index-store.ts` | **Hand-Written by Us** | Dual store manager with Sentinel quality gate and automatic stale-chunk purging on schema version bumps. |
+| `src/retrieval/rag-service.ts`| **Hand-Written by Us** | Sandboxed prompt template, citation regex parser, and unanswerable query refusal logic. |
+| `src/server/app.ts` | **Hand-Written by Us** | REST API endpoints, graceful shutdown handlers (SIGTERM/SIGINT), and startup environment checks. |
+| `public/app.js` & `style.css` | **Heavily Edited by Us** | Interactive dashboard UI, provenance badges, confirmation dialogs, and live incident timeline. |
+| `tests/*.test.ts` (13 test files) | **Heavily Edited by Us** | 53 unit and integration tests covering edge cases, state machine transitions, and concurrency locks. |
 
 ---
 
-## 🔮 Production Readiness & Scoped-Out Features
+## 12. Production Readiness & Future Work
 
-AegisRAG was architected for maximum reliability under hackathon judging conditions. Several advanced capabilities were deliberately scoped out to ensure rock-solid core execution:
+The following advanced capabilities were deliberately scoped out of this hackathon submission to ensure rock-solid core reliability:
 
-| Scoped-Out Feature | Technical Rationale for Scoping Out | Production Path Forward |
-| :--- | :--- | :--- |
-| **Knowledge Graph RAG (GraphRAG)** | Graph construction over dynamically changing HTML introduces entity resolution latency (>15s per ingestion). | Implement async background entity extraction via Neo4j / Memgraph once raw extractions stabilize. |
-| **Multi-Hop Agentic Retrieval Loops** | Unconstrained multi-step agent reasoning can loop infinitely during benchmark evaluation. | Implement bounded 2-step ReAct retrieval with deterministic early-stopping criteria. |
-| **Distributed Vector Store (Qdrant / Chroma Cloud)** | Adding external cloud network dependencies introduces network latency and authentication points of failure during judging. | Swap local SQLite `chunks_index` vector store with Qdrant Cloud via the existing `IndexStore` interface. |
-| **Long-Term User Memory** | User session state is orthogonal to the core challenge of web scraping self-healing. | Store conversational session checkpoints in SQLite. |
+- **Knowledge Graph RAG (GraphRAG)**: Entity-relation graph construction over dynamically mutating web pages introduces extraction latencies exceeding 15 seconds per run. In production, graph extraction will run asynchronously in background workers after raw extractions are validated.
+- **Multi-Step Agentic Retrieval Loops**: Unbounded multi-hop agent reasoning can enter non-deterministic loops during real-time user chat evaluation. Production implementations will use bounded 2-step ReAct retrieval with strict early-stopping guarantees.
+- **Persistent Conversational Memory**: Cross-session user dialogue history was excluded to maintain focus on the core reliability challenge of self-healing web extraction. Conversational state will be persisted in session tables using the existing SQLite database layer.
+- **Full Multi-Field Golden Coverage**: Pre-defining golden reference values for dynamically evolving web feeds is feasible only for core invariant fields. Full coverage will leverage semi-supervised human-in-the-loop review queues to label emerging schema fields over time.
 
 ---
 
-## 🛡️ Standing Safety & Security Rules
+## 13. License & Author
 
-All operations in this codebase strictly adhere to these 5 boundaries:
-1. **Safe CLI Invocations**: CLI calls use direct Node binary invocation (`shell: false`) with argument arrays — eliminating `cmd.exe` interpolation and shell-injection risks.
-2. **Strict Secrets Hygiene**: Zero credentials in git; `.env` is strictly git-ignored; startup fails fast if `API_AUTH_SECRET` is unset.
-3. **Manual Heal Approval Gate**: `--auto-approve` is never passed to CLI commands; operator approval remains mandatory.
-4. **Auth / Permission Fault Handling**: Immediate halt on permission errors without privilege escalation.
-5. **Untrusted Data Isolation**: Scraped web text and diff summaries are wrapped in explicit delimiter tags and treated strictly as passive reference data.
-
----
-
-## 📜 License
-MIT License © 2026 Aditya Yawalkar.
+- **Author**: Aditya Yawalkar
+- **License**: [MIT License](LICENSE) © 2026 Aditya Yawalkar
