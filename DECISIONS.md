@@ -67,3 +67,30 @@ This document records the rationale behind core design and architecture decision
 - **Collector Concurrency Mutex Locking**: Added an in-memory mutex set (`activeHealLocks`) keyed by `collector_id` in `initiateHeal()`. Blocks race conditions where overlapping triggers on the same collector could execute parallel heals before state transitions take effect.
 - **Strict Startup Auth Secret Validation**: Eliminated all public hardcoded default token fallbacks. The server now immediately throws on startup (`getAuthSecret()`) if `API_AUTH_SECRET` is unset or empty, and setup scripts automatically generate secure random tokens.
 - **Strict XML Framing in Gemma Diagnosis Prompts**: Wrapped all dynamic diagnostic fields (`<TARGET_URL>`, `<FAILED_FIELDS>`, `<DIAGNOSTIC_SUMMARY>`, `<EXPECTED_SCHEMA_FIELDS>`) in strict XML tags with explicit system directives enforcing passive reference data treatment.
+
+---
+
+### Final Hardening & Advanced Reliability Extensions (Aug 24, 2026)
+
+- **Diagnosis Generation Tier Provenance Tracking**:
+  - *Context*: Diagnosis generation can occur locally (`local_gemma_server`), via cloud fallback (`huggingface_inference`), or rule-based fallback (`deterministic_fallback`).
+  - *Decision*: Persisted `generated_by` in SQLite (`heal_attempts.generated_by` with PRAGMA table migration guard) and surfaced color-coded provenance badges across the Health Console and Incident Replay (`🟢 Local Gemma 4 E2B`, `🟡 HF Inference`, `🔴 Deterministic fallback`). Operators and evaluators have 100% visibility into which engine authored each repair suggestion.
+
+- **Anti-Bot Challenge & CAPTCHA Discrimination (`BLOCKED` Failure Category)**:
+  - *Context*: Anti-bot splash screens, CAPTCHAs, or Cloudflare challenge pages often return HTTP 200/403 with altered HTML, triggering Sentinel soft-failure / token-overlap anomalies.
+  - *Decision*: Classified these signals as `BLOCKED` rather than `SCHEMA_CORRUPTED`. A block page is not a selector bug; attempting to "heal" against a CAPTCHA page wastes Scraper Studio credits and corrupts working CSS/XPath selectors. `BLOCKED` errors bypass `initiateHeal()` entirely and route to proxy rotation and retry backoff.
+
+- **First-Healthy Golden-Row Snapshotting (`golden_rows` Table)**:
+  - *Context*: Scraped fields can pass Sentinel type/range validation (e.g., valid non-empty string, valid integer) and still be semantically incorrect (e.g., selecting the author bio instead of repo description).
+  - *Decision*: When a collector first achieves `HEALTHY` status, its verified rows are snapshotted **once** into the SQLite `golden_rows` table (persisting across server restarts). This known-good reference baseline is preserved and never overwritten by subsequent heal cycles.
+
+- **Post-Approval Golden-Row Tolerance Gating & Gemma Feedback Loop**:
+  - *Context*: Blindly trusting an approved heal without value-level verification risks polluting the downstream RAG vector and BM25 index with erroneous data.
+  - *Decision*: After `approveHeal()` executes and post-heal verification rows are captured, AegisRAG runs an automated second check comparing extracted values field-by-field against `golden_rows`.
+    - Strings, enums, and URLs require exact equality.
+    - Dynamic numeric counts allow a 20% variance band to accommodate natural web drift.
+    - If tolerance is breached, the collector is held in `DEGRADED` (transition to `RECOVERED` is blocked), and the specific field discrepancies are fed into the next Gemma repair prompt via `<GOLDEN_DISCREPANCIES>` context tags.
+
+- **Honest UI Golden Verification Reporting**:
+  - *Context*: Pretending 100% verification when only a subset of fields have golden reference snapshots is misleading.
+  - *Decision*: The Health Console and Incident Replay explicitly compute and display `coveredFields` vs. `uncoveredFields` and `coveragePct`, clearly distinguishing 100% verified schemas from partial snapshot coverage.
