@@ -18,6 +18,9 @@ import { type SentinelReport } from '../sentinel/types.js';
 import { CircuitBreaker, CircuitBreakerTrippedError } from './circuit-breaker.js';
 import { generateHealDescription, type GemmaDiagnosisResult } from './gemma-client.js';
 import { validateStateTransition } from './state-machine.js';
+import { compareAgainstGoldenSnapshot, type GoldenDiscrepancy } from './golden-comparison.js';
+
+export { compareAgainstGoldenSnapshot, type GoldenDiscrepancy };
 
 export interface HealOptions {
   db?: DatabaseType;
@@ -255,13 +258,19 @@ export async function initiateHeal(
   }
 }
 
+export interface ApproveHealResult {
+  success: boolean;
+  attempt: HealAttemptRecord;
+  discrepancies?: GoldenDiscrepancy[];
+}
+
 /**
  * Manually approves a pending heal attempt, applying the repair to the live scraper.
  */
 export async function approveHeal(
   attemptId: string,
-  options: HealOptions = {}
-): Promise<{ success: boolean; attempt: HealAttemptRecord }> {
+  options: HealOptions & { verificationRows?: Record<string, unknown>[] } = {}
+): Promise<ApproveHealResult> {
   const db = options.db || getDatabase();
   const cliExec = options.cliExecutor || defaultCliExecutor;
   const breaker = new CircuitBreaker(db);
@@ -290,12 +299,30 @@ export async function approveHeal(
   updateHealAttempt(attemptId, { status: 'APPROVED', resolved_at: resolvedAt }, db);
   breaker.recordSuccess(attempt.collector_id);
 
+  // Tier 1 Detection: Compare new/preview row(s) against golden snapshot field-by-field
+  let rowsToVerify: Record<string, unknown>[] = options.verificationRows || [];
+  if (rowsToVerify.length === 0 && attempt.preview_result) {
+    try {
+      const parsed = JSON.parse(attempt.preview_result);
+      if (Array.isArray(parsed)) {
+        rowsToVerify = parsed;
+      } else if (parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>).preview_result)) {
+        rowsToVerify = (parsed as Record<string, unknown>).preview_result as Record<string, unknown>[];
+      }
+    } catch {
+      // Ignore parse error on non-JSON previews
+    }
+  }
+
+  const discrepancies = compareAgainstGoldenSnapshot(attempt.collector_id, rowsToVerify);
+
   const updatedAttempt = getHealAttemptById(attemptId, db)!;
   console.log(`[heal-loop] 🎉 Heal approved successfully. Collector '${attempt.collector_id}' transitioned to RECOVERED.`);
 
   return {
     success: true,
     attempt: updatedAttempt,
+    discrepancies,
   };
 }
 

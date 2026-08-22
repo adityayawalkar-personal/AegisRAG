@@ -169,4 +169,56 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
     expect(breaker.getState('c_heal_test_collector').status).toBe('HEALTHY');
     expect(breaker.isTripped('c_heal_test_collector')).toBe(false);
   });
+
+  it('logs golden snapshot discrepancies when heal passes Sentinel but differs from golden reference, transitioning to RECOVERED', async () => {
+    // Row passes Sentinel validation (valid string formats, correct fields) but differs from golden-run.json
+    const divergentHealedRow = [
+      {
+        repo_name: 'public-apis/public-apis',
+        author: 'public-apis',
+        description: 'A completely different modified description string that passes all type checks.',
+        stars_today: '999 stars today', // Differs from golden "245 stars today"
+        total_stars: '312,450',
+        language: 'Python',
+        url: 'https://github.com/public-apis/public-apis',
+      },
+    ];
+
+    const mockCli = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify(divergentHealedRow),
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const initResult = await initiateHeal(mockRun, mockReport, { db, cliExecutor: mockCli });
+    expect(initResult.status).toBe('AWAITING_APPROVAL');
+
+    const approveCli = vi.fn().mockResolvedValue({
+      stdout: 'Approved repair.',
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const approveResult = await approveHeal(initResult.attempt.attempt_id, {
+      db,
+      cliExecutor: approveCli,
+      verificationRows: divergentHealedRow,
+    });
+
+    // 1. Approval succeeds and collector transitions to RECOVERED (Tier 1: no control-flow alteration)
+    expect(approveResult.success).toBe(true);
+    expect(approveResult.attempt.status).toBe('APPROVED');
+
+    const breaker = new CircuitBreaker(db);
+    expect(breaker.getState('c_heal_test_collector').status).toBe('RECOVERED');
+
+    // 2. Discrepancies are identified and logged
+    expect(approveResult.discrepancies).toBeDefined();
+    expect(approveResult.discrepancies!.length).toBeGreaterThanOrEqual(1);
+
+    const starsDiscrepancy = approveResult.discrepancies!.find((d) => d.field === 'stars_today');
+    expect(starsDiscrepancy).toBeDefined();
+    expect(starsDiscrepancy?.goldenValue).toBe('245 stars today');
+    expect(starsDiscrepancy?.actualValue).toBe('999 stars today');
+  });
 });
