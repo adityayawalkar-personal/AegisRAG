@@ -456,21 +456,43 @@ function renderCollectors(collectors) {
   }
 
   container.innerHTML = collectors
-    .map(
-      (c) => `
-    <div class="collector-card">
-      <div>
-        <strong>${escapeHtml(c.name || c.collector_id)}</strong>
-        <div style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono', monospace;">
-          ID: ${escapeHtml(c.collector_id)} | Schema: v${escapeHtml(c.schema_version)} | Target: ${escapeHtml(c.target_url)}
+    .map((c) => {
+      const golden = c.goldenVerification;
+      let goldenHtml = '';
+      if (golden && golden.hasSnapshot) {
+        if (golden.uncoveredFields && golden.uncoveredFields.length > 0) {
+          goldenHtml = `
+            <div style="margin-top:4px; font-size:11px; color:#f59e0b; display:flex; align-items:center; gap:4px;">
+              <span>⚠️ Partial Golden Snapshot (${golden.coveragePct}%):</span>
+              <span>Checked: <code>${escapeHtml(golden.coveredFields.join(', '))}</code></span>
+              <span style="color:var(--text-muted);">| Uncovered: <code>${escapeHtml(golden.uncoveredFields.join(', '))}</code></span>
+            </div>
+          `;
+        } else {
+          goldenHtml = `
+            <div style="margin-top:4px; font-size:11px; color:#10b981; display:flex; align-items:center; gap:4px;">
+              <span>✨ Golden Verified (100%):</span>
+              <span><code>[${escapeHtml(golden.coveredFields.join(', '))}]</code></span>
+            </div>
+          `;
+        }
+      }
+
+      return `
+        <div class="collector-card">
+          <div>
+            <strong>${escapeHtml(c.name || c.collector_id)}</strong>
+            <div style="font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono', monospace;">
+              ID: ${escapeHtml(c.collector_id)} | Schema: v${escapeHtml(c.schema_version || 1)} | Target: ${escapeHtml(c.target_url)}
+            </div>
+            ${goldenHtml}
+          </div>
+          <div>
+            <span class="status-badge status-${escapeHtml(c.state?.toLowerCase() || c.status?.toLowerCase() || 'healthy')}">${escapeHtml(c.state || c.status || 'HEALTHY')}</span>
+          </div>
         </div>
-      </div>
-      <div>
-        <span class="status-badge status-${escapeHtml(c.status.toLowerCase())}">${escapeHtml(c.status)}</span>
-      </div>
-    </div>
-  `
-    )
+      `;
+    })
     .join('');
 }
 
@@ -624,6 +646,24 @@ async function fetchIncidentReplay() {
         if (event.details?.diffSummary) descText = event.details.diffSummary;
         if (event.details?.status && !descText) descText = `Status: ${event.details.status}`;
 
+        let goldenDetailHtml = '';
+        if (event.details?.goldenVerification) {
+          const gv = event.details.goldenVerification;
+          if (gv.toleranceBreach) {
+            goldenDetailHtml = `
+              <div style="margin-top:6px; font-size:12px; color:#ef4444; background:rgba(239,68,68,0.1); padding:4px 8px; border-radius:4px; border:1px solid rgba(239,68,68,0.2);">
+                ⚠️ <strong>Golden Tolerance Exceeded:</strong> Held in DEGRADED for re-healing. Checked fields: <code>[${escapeHtml(gv.coveredFields?.join(', ') || '')}]</code>.
+              </div>
+            `;
+          } else if (gv.isVerified) {
+            goldenDetailHtml = `
+              <div style="margin-top:6px; font-size:12px; color:#10b981; background:rgba(16,185,129,0.1); padding:4px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.2);">
+                ✨ <strong>Golden Verified:</strong> <code>[${escapeHtml(gv.coveredFields?.join(', ') || '')}]</code> ${gv.uncoveredFields?.length ? `<span style="color:var(--text-muted);">(Uncovered: [${escapeHtml(gv.uncoveredFields.join(', '))}])</span>` : ''}
+              </div>
+            `;
+          }
+        }
+
         return `
           <div class="timeline-item">
             <div class="timeline-content">
@@ -633,6 +673,7 @@ async function fetchIncidentReplay() {
                 ${badgeHtml}
               </div>
               <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">${escapeHtml(descText)}</div>
+              ${goldenDetailHtml}
             </div>
           </div>
         `;

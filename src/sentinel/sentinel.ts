@@ -3,6 +3,8 @@ import { type Database as DatabaseType } from 'better-sqlite3';
 import { 
   getDatabase, 
   insertRunStatus, 
+  saveGoldenRows,
+  getGoldenRows,
   type RawRunRecord, 
   type RunStatusRecord, 
   type RunStatusType 
@@ -183,6 +185,23 @@ export class Sentinel {
 
     if (persist) {
       this.persistStatus(report, db);
+
+      // Snapshot first known-good rows into golden_rows table (captured once, not regenerated per heal)
+      if (finalStatus === 'HEALTHY' && rows.length > 0) {
+        const existingGolden = getGoldenRows(run.collector_id, db);
+        if (!existingGolden) {
+          saveGoldenRows(
+            {
+              collector_id: run.collector_id,
+              snapshot_json: JSON.stringify(rows),
+              captured_at: validatedAt,
+              row_count: rows.length,
+            },
+            db
+          );
+          console.log(`[sentinel] 📸 Baseline golden rows captured for collector '${run.collector_id}' (${rows.length} row(s)).`);
+        }
+      }
     }
 
     return report;

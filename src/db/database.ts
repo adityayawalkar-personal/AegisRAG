@@ -52,6 +52,13 @@ export interface CollectorStateRecord {
   updated_at: string;
 }
 
+export interface GoldenRowRecord {
+  collector_id: string;
+  snapshot_json: string;
+  captured_at: string;
+  row_count: number;
+}
+
 export interface ChunkRecord {
   chunk_id: string;
   parent_id: string;
@@ -143,6 +150,13 @@ export function initSchema(db: DatabaseType): void {
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       last_healed_at TEXT,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS golden_rows (
+      collector_id TEXT PRIMARY KEY,
+      snapshot_json TEXT NOT NULL,
+      captured_at TEXT NOT NULL,
+      row_count INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS chunks_index (
@@ -455,4 +469,23 @@ export function countRuns(
   const stmt = db.prepare(`SELECT COUNT(*) as count FROM raw_runs`);
   const result = stmt.get() as { count: number };
   return result.count;
+}
+
+export function saveGoldenRows(
+  record: GoldenRowRecord,
+  db: DatabaseType = getDatabase()
+): void {
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO golden_rows (collector_id, snapshot_json, captured_at, row_count)
+    VALUES (@collector_id, @snapshot_json, @captured_at, @row_count)
+  `);
+  stmt.run(record);
+}
+
+export function getGoldenRows(
+  collectorId: string,
+  db: DatabaseType = getDatabase()
+): GoldenRowRecord | undefined {
+  const stmt = db.prepare(`SELECT * FROM golden_rows WHERE collector_id = ?`);
+  return stmt.get(collectorId) as GoldenRowRecord | undefined;
 }

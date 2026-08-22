@@ -9,6 +9,7 @@ import {
   getLatestRunStatus, 
   getLatestHealAttempts, 
   getHealAttemptById,
+  getGoldenRows,
   type RawRunRecord, 
   type RunStatusRecord, 
   type HealAttemptRecord 
@@ -71,6 +72,32 @@ export function createServer(customDb?: ReturnType<typeof getDatabase>): http.Se
           const latestRun = getLatestRuns(s.source_id, 1, db)[0] || null;
           const latestStatus = getLatestRunStatus(s.source_id, 1, db)[0] || null;
           const healAttempts = getLatestHealAttempts(s.collector_id, 5, db);
+          const goldenRecord = getGoldenRows(s.collector_id, db);
+
+          let goldenFields: string[] = [];
+          if (goldenRecord?.snapshot_json) {
+            try {
+              const parsed = JSON.parse(goldenRecord.snapshot_json);
+              if (Array.isArray(parsed) && parsed[0]) {
+                goldenFields = Object.keys(parsed[0]);
+              }
+            } catch {}
+          } else {
+            // Check default golden fixture
+            try {
+              const fixturePath = path.join(process.cwd(), 'fixtures', 'golden-run.json');
+              if (fs.existsSync(fixturePath)) {
+                const parsed = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+                if (Array.isArray(parsed) && parsed[0]) {
+                  goldenFields = Object.keys(parsed[0]);
+                }
+              }
+            } catch {}
+          }
+
+          const coveredFields = s.expected_fields.filter((f) => goldenFields.includes(f));
+          const uncoveredFields = s.expected_fields.filter((f) => !goldenFields.includes(f));
+
           return {
             sourceId: s.source_id,
             collectorId: s.collector_id,
@@ -83,6 +110,16 @@ export function createServer(customDb?: ReturnType<typeof getDatabase>): http.Se
             latestRun,
             latestStatus,
             healAttempts,
+            goldenVerification: {
+              hasSnapshot: !!goldenRecord || goldenFields.length > 0,
+              coveredFields,
+              uncoveredFields,
+              coveragePct:
+                s.expected_fields.length > 0
+                  ? Math.round((coveredFields.length / s.expected_fields.length) * 100)
+                  : 0,
+              capturedAt: goldenRecord?.captured_at || 'fixture baseline',
+            },
           };
         });
 
@@ -111,6 +148,30 @@ export function createServer(customDb?: ReturnType<typeof getDatabase>): http.Se
         const runs = getLatestRuns(source.source_id, 10, db);
         const statuses = getLatestRunStatus(source.source_id, 10, db);
         const healAttempts = getLatestHealAttempts(collectorId, 10, db);
+        const goldenRecord = getGoldenRows(collectorId, db);
+
+        let goldenFields: string[] = [];
+        if (goldenRecord?.snapshot_json) {
+          try {
+            const parsed = JSON.parse(goldenRecord.snapshot_json);
+            if (Array.isArray(parsed) && parsed[0]) {
+              goldenFields = Object.keys(parsed[0]);
+            }
+          } catch {}
+        } else {
+          try {
+            const fixturePath = path.join(process.cwd(), 'fixtures', 'golden-run.json');
+            if (fs.existsSync(fixturePath)) {
+              const parsed = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+              if (Array.isArray(parsed) && parsed[0]) {
+                goldenFields = Object.keys(parsed[0]);
+              }
+            }
+          } catch {}
+        }
+
+        const coveredFields = source.expected_fields.filter((f) => goldenFields.includes(f));
+        const uncoveredFields = source.expected_fields.filter((f) => !goldenFields.includes(f));
 
         // Build chronological timeline events
         const events: {
@@ -151,11 +212,22 @@ export function createServer(customDb?: ReturnType<typeof getDatabase>): http.Se
             },
           });
           if (h.resolved_at) {
+            const hasToleranceBreach = h.error_message?.includes('Golden snapshot tolerance exceeded');
             events.push({
               timestamp: h.resolved_at,
               type: 'APPROVAL_GATE',
               title: `Operator Heal Action: ${h.status}`,
-              details: { attemptId: h.attempt_id, status: h.status },
+              details: {
+                attemptId: h.attempt_id,
+                status: h.status,
+                errorMessage: h.error_message,
+                goldenVerification: {
+                  isVerified: !hasToleranceBreach,
+                  coveredFields,
+                  uncoveredFields,
+                  toleranceBreach: !!hasToleranceBreach,
+                },
+              },
             });
           }
         }

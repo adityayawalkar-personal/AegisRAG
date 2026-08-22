@@ -18,10 +18,10 @@ import { type SentinelReport } from '../sentinel/types.js';
 import { CircuitBreaker, CircuitBreakerTrippedError } from './circuit-breaker.js';
 import { generateHealDescription, type GemmaDiagnosisResult } from './gemma-client.js';
 import { validateStateTransition } from './state-machine.js';
-import { compareAgainstGoldenSnapshot, type GoldenDiscrepancy } from './golden-comparison.js';
+import { compareAgainstGoldenSnapshot, type GoldenDiscrepancy, type GoldenVerificationSummary } from './golden-comparison.js';
 import { classifyFailure } from './failure-classifier.js';
 
-export { compareAgainstGoldenSnapshot, type GoldenDiscrepancy };
+export { compareAgainstGoldenSnapshot, type GoldenDiscrepancy, type GoldenVerificationSummary };
 
 export interface HealOptions {
   db?: DatabaseType;
@@ -275,6 +275,7 @@ export interface ApproveHealResult {
   success: boolean;
   attempt: HealAttemptRecord;
   discrepancies?: GoldenDiscrepancy[];
+  goldenVerification?: GoldenVerificationSummary;
 }
 
 /**
@@ -325,8 +326,8 @@ export async function approveHeal(
     }
   }
 
-  const discrepancies = compareAgainstGoldenSnapshot(attempt.collector_id, rowsToVerify);
-  const beyondTolerance = discrepancies.filter((d) => d.isBeyondTolerance);
+  const goldenSummary = compareAgainstGoldenSnapshot(attempt.collector_id, rowsToVerify, { db });
+  const beyondTolerance = goldenSummary.discrepancies.filter((d) => d.isBeyondTolerance);
 
   if (beyondTolerance.length > 0) {
     const errorMsg = `Golden snapshot tolerance exceeded: ${beyondTolerance
@@ -361,7 +362,8 @@ export async function approveHeal(
     return {
       success: false,
       attempt: updatedAttempt,
-      discrepancies,
+      discrepancies: goldenSummary.discrepancies,
+      goldenVerification: goldenSummary,
     };
   }
 
@@ -376,6 +378,7 @@ export async function approveHeal(
     success: true,
     attempt: updatedAttempt,
     discrepancies: [],
+    goldenVerification: goldenSummary,
   };
 }
 

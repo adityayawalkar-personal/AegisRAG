@@ -9,6 +9,8 @@ import {
   countRuns,
   insertHealAttempt,
   getLatestHealAttempts,
+  saveGoldenRows,
+  getGoldenRows,
   type RawRunRecord 
 } from '../src/db/database.js';
 
@@ -165,5 +167,23 @@ describe('SQLite Database Layer', () => {
     const attempts = getLatestHealAttempts('c1', 5, db);
     expect(attempts.length).toBe(1);
     expect(attempts[0].generated_by).toBe('local_gemma_server');
+  });
+
+  it('should persist and retrieve golden_rows snapshots', () => {
+    saveGoldenRows(
+      {
+        collector_id: 'c_test_collector',
+        snapshot_json: JSON.stringify([{ repo: 'facebook/react', stars: 228000 }]),
+        captured_at: new Date().toISOString(),
+        row_count: 1,
+      },
+      db
+    );
+
+    const golden = getGoldenRows('c_test_collector', db);
+    expect(golden).toBeDefined();
+    expect(golden?.collector_id).toBe('c_test_collector');
+    expect(golden?.row_count).toBe(1);
+    expect(JSON.parse(golden!.snapshot_json)).toEqual([{ repo: 'facebook/react', stars: 228000 }]);
   });
 });
