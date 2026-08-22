@@ -4,10 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    pool: 'threads',
+    pool: 'forks',
+    forks: {
+      singleFork: true,
+    },
     fileParallelism: false,
-    maxConcurrency: 1,
-    isolate: false,
+    maxWorkers: 1,
+    isolate: true,
     testTimeout: 30000,
     hookTimeout: 30000,
     env: {
