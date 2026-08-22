@@ -79,8 +79,8 @@ async function runFullDemo() {
           collector_id: source.collector_id,
           preview_result: [
             {
-              product_page_url: 'https://github.com/facebook/react',
-              trending_repositories: ['facebook/react', 'vercel/next.js'],
+              product_page_url: 'https://github.com/public-apis/public-apis',
+              trending_repositories: [],
             },
           ],
           generated_code_summary: 'Regenerated CSS selectors matching updated DOM markup structure.',

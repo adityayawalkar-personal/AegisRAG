@@ -144,6 +144,11 @@ export async function initiateHeal(
     }
     const expectedFields = sourceConfig.expected_fields;
 
+    // Check for previous golden discrepancy context on this collector
+    const previousAttempts = getLatestHealAttempts(run.collector_id, 3, db);
+    const lastFailedAttempt = previousAttempts.find((a) => a.error_message?.includes('Golden snapshot tolerance exceeded'));
+    const goldenDiscrepancies = lastFailedAttempt?.error_message ? [lastFailedAttempt.error_message] : undefined;
+
     // 4. Generate Gemma plain-language repair description (< 900 chars)
     const diagnosis = await generateHealDescription(
       {
@@ -152,6 +157,7 @@ export async function initiateHeal(
         failedFields: sentinelReport.failedFields,
         diffSummary: sentinelReport.diffSummary,
         expectedFields,
+        goldenDiscrepancies,
       },
       options.gemmaEndpoint
     );
@@ -188,7 +194,6 @@ export async function initiateHeal(
 
     const attemptId = randomUUID();
     const now = new Date().toISOString();
-    const previousAttempts = getLatestHealAttempts(run.collector_id, 10, db);
     const attemptNumber = previousAttempts.length + 1;
 
     if (exitCode !== 0) {
@@ -266,6 +271,8 @@ export interface ApproveHealResult {
 
 /**
  * Manually approves a pending heal attempt, applying the repair to the live scraper.
+ * Under Tier 2 Golden Snapshot validation: If verified rows breach tolerance bands,
+ * keeps the collector in DEGRADED and records discrepancy feedback for the next heal cycle.
  */
 export async function approveHeal(
   attemptId: string,
@@ -295,11 +302,7 @@ export async function approveHeal(
     throw new Error(errorMsg);
   }
 
-  const resolvedAt = new Date().toISOString();
-  updateHealAttempt(attemptId, { status: 'APPROVED', resolved_at: resolvedAt }, db);
-  breaker.recordSuccess(attempt.collector_id);
-
-  // Tier 1 Detection: Compare new/preview row(s) against golden snapshot field-by-field
+  // Tier 2 Detection & Gating: Compare new/preview row(s) against golden snapshot field-by-field
   let rowsToVerify: Record<string, unknown>[] = options.verificationRows || [];
   if (rowsToVerify.length === 0 && attempt.preview_result) {
     try {
@@ -315,6 +318,48 @@ export async function approveHeal(
   }
 
   const discrepancies = compareAgainstGoldenSnapshot(attempt.collector_id, rowsToVerify);
+  const beyondTolerance = discrepancies.filter((d) => d.isBeyondTolerance);
+
+  if (beyondTolerance.length > 0) {
+    const errorMsg = `Golden snapshot tolerance exceeded: ${beyondTolerance
+      .map((d) => `${d.field} (Row ${d.rowIndex}): expected ${JSON.stringify(d.goldenValue)}, got ${JSON.stringify(d.actualValue)}`)
+      .join('; ')}`;
+
+    console.warn(`[heal-loop] ⚠️ ${errorMsg}. Keeping collector '${attempt.collector_id}' in DEGRADED for re-healing.`);
+
+    updateHealAttempt(
+      attemptId,
+      {
+        status: 'FAILED',
+        error_message: errorMsg,
+        resolved_at: new Date().toISOString(),
+      },
+      db
+    );
+
+    // Keep collector in DEGRADED
+    setCollectorState(
+      {
+        collector_id: attempt.collector_id,
+        status: 'DEGRADED',
+        consecutive_failures: 1,
+        last_healed_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      db
+    );
+
+    const updatedAttempt = getHealAttemptById(attemptId, db)!;
+    return {
+      success: false,
+      attempt: updatedAttempt,
+      discrepancies,
+    };
+  }
+
+  const resolvedAt = new Date().toISOString();
+  updateHealAttempt(attemptId, { status: 'APPROVED', resolved_at: resolvedAt }, db);
+  breaker.recordSuccess(attempt.collector_id);
 
   const updatedAttempt = getHealAttemptById(attemptId, db)!;
   console.log(`[heal-loop] 🎉 Heal approved successfully. Collector '${attempt.collector_id}' transitioned to RECOVERED.`);
@@ -322,7 +367,7 @@ export async function approveHeal(
   return {
     success: true,
     attempt: updatedAttempt,
-    discrepancies,
+    discrepancies: [],
   };
 }
 

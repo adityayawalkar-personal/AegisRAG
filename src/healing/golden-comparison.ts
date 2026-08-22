@@ -7,17 +7,73 @@ export interface GoldenDiscrepancy {
   field: string;
   goldenValue: unknown;
   actualValue: unknown;
+  isBeyondTolerance: boolean;
+  reason?: string;
+}
+
+/**
+ * Checks whether two values are within acceptable tolerance:
+ * - Strings / Enums / Arrays / Objects: Exact match
+ * - Numbers / Formatted numeric strings (e.g. "245 stars today" vs "250 stars today"):
+ *   Allow up to 20% natural variance for dynamic web counts.
+ */
+export function isValueWithinTolerance(
+  goldenVal: unknown,
+  actualVal: unknown,
+  tolerancePct: number = 20
+): { withinTolerance: boolean; reason?: string } {
+  // If exact serialization match
+  if (JSON.stringify(goldenVal) === JSON.stringify(actualVal)) {
+    return { withinTolerance: true };
+  }
+
+  // Attempt numeric comparison if both contain numbers
+  const numGolden = extractNumeric(goldenVal);
+  const numActual = extractNumeric(actualVal);
+
+  if (numGolden !== null && numActual !== null && numGolden > 0) {
+    const pctDiff = (Math.abs(numActual - numGolden) / numGolden) * 100;
+    if (pctDiff <= tolerancePct) {
+      return {
+        withinTolerance: true,
+        reason: `Numeric variance ${pctDiff.toFixed(1)}% is within ${tolerancePct}% tolerance band`,
+      };
+    } else {
+      return {
+        withinTolerance: false,
+        reason: `Numeric difference ${pctDiff.toFixed(1)}% exceeds ${tolerancePct}% tolerance band (golden: ${numGolden}, actual: ${numActual})`,
+      };
+    }
+  }
+
+  return {
+    withinTolerance: false,
+    reason: `Exact value mismatch: expected ${JSON.stringify(goldenVal)}, got ${JSON.stringify(actualVal)}`,
+  };
+}
+
+function extractNumeric(val: unknown): number | null {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/,/g, '');
+    const match = cleaned.match(/[-+]?[0-9]*\.?[0-9]+/);
+    if (match) {
+      const parsed = parseFloat(match[0]);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  return null;
 }
 
 /**
  * Compares post-heal verification or preview rows against the golden snapshot.
- * Tier 1 detection only: Identifies and logs field-level disagreements without
- * altering control-flow or blocking the transition to RECOVERED.
+ * Evaluates field-level agreement and identifies deviations beyond tolerance bands.
  */
 export function compareAgainstGoldenSnapshot(
   collectorId: string,
   actualRows: Record<string, unknown>[],
-  fixturesDir?: string
+  fixturesDir?: string,
+  tolerancePct: number = 20
 ): GoldenDiscrepancy[] {
   if (!Array.isArray(actualRows) || actualRows.length === 0) {
     return [];
@@ -58,14 +114,16 @@ export function compareAgainstGoldenSnapshot(
       const actualVal = actualRow[field];
       if (actualVal === undefined) continue;
 
-      const isMismatch = JSON.stringify(actualVal) !== JSON.stringify(goldenVal);
-      if (isMismatch) {
+      const { withinTolerance, reason } = isValueWithinTolerance(goldenVal, actualVal, tolerancePct);
+      if (!withinTolerance) {
         discrepancies.push({
           collectorId,
           rowIndex: i,
           field,
           goldenValue: goldenVal,
           actualValue: actualVal,
+          isBeyondTolerance: true,
+          reason,
         });
       }
     }
@@ -73,15 +131,15 @@ export function compareAgainstGoldenSnapshot(
 
   if (discrepancies.length > 0) {
     console.warn(
-      `[heal-loop] ⚠️ Golden Snapshot Discrepancy detected for collector '${collectorId}' (${discrepancies.length} field mismatch(es)):`
+      `[heal-loop] ⚠️ Golden Snapshot Discrepancy detected for collector '${collectorId}' (${discrepancies.length} field mismatch(es) beyond tolerance):`
     );
     for (const d of discrepancies) {
       console.warn(
-        `  - Collector '${d.collectorId}' [Field '${d.field}' at Row ${d.rowIndex}]: Golden = ${JSON.stringify(d.goldenValue)}, Actual = ${JSON.stringify(d.actualValue)}`
+        `  - Collector '${d.collectorId}' [Field '${d.field}' at Row ${d.rowIndex}]: Golden = ${JSON.stringify(d.goldenValue)}, Actual = ${JSON.stringify(d.actualValue)} (${d.reason})`
       );
     }
   } else {
-    console.log(`[heal-loop] ✨ Golden snapshot comparison: verified match for collector '${collectorId}'.`);
+    console.log(`[heal-loop] ✨ Golden snapshot comparison: verified match within tolerance for collector '${collectorId}'.`);
   }
 
   return discrepancies;

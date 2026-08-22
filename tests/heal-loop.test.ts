@@ -170,17 +170,17 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
     expect(breaker.isTripped('c_heal_test_collector')).toBe(false);
   });
 
-  it('logs golden snapshot discrepancies when heal passes Sentinel but differs from golden reference, transitioning to RECOVERED', async () => {
-    // Row passes Sentinel validation (valid string formats, correct fields) but differs from golden-run.json
+  it('blocks transition to RECOVERED when golden snapshot tolerance is breached, keeping collector DEGRADED and feeding context into next attempt', async () => {
+    // Row passes Sentinel validation (valid types) but has fields differing beyond 20% tolerance
     const divergentHealedRow = [
       {
-        repo_name: 'public-apis/public-apis',
-        author: 'public-apis',
-        description: 'A completely different modified description string that passes all type checks.',
-        stars_today: '999 stars today', // Differs from golden "245 stars today"
+        repo_name: 'wrong-org/unknown-repo', // Mismatch against golden 'public-apis/public-apis'
+        author: 'wrong-author',
+        description: 'An arbitrary description string.',
+        stars_today: '999 stars today', // Exceeds 20% tolerance band from 245
         total_stars: '312,450',
         language: 'Python',
-        url: 'https://github.com/public-apis/public-apis',
+        url: 'https://github.com/wrong-org/unknown-repo',
       },
     ];
 
@@ -205,20 +205,39 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
       verificationRows: divergentHealedRow,
     });
 
-    // 1. Approval succeeds and collector transitions to RECOVERED (Tier 1: no control-flow alteration)
-    expect(approveResult.success).toBe(true);
-    expect(approveResult.attempt.status).toBe('APPROVED');
+    // 1. Gated: Approval fails, collector remains in DEGRADED (Tier 2 Gate)
+    expect(approveResult.success).toBe(false);
+    expect(approveResult.attempt.status).toBe('FAILED');
+    expect(approveResult.attempt.error_message).toContain('Golden snapshot tolerance exceeded');
 
     const breaker = new CircuitBreaker(db);
+    expect(breaker.getState('c_heal_test_collector').status).toBe('DEGRADED');
+
+    // 2. Feed discrepancy into the next heal diagnosis context
+    const secondHealResult = await initiateHeal(mockRun, mockReport, { db, cliExecutor: mockCli });
+    expect(secondHealResult.diagnosis.description).toContain('beyond golden tolerance');
+
+    // 3. Now provide a clean heal that matches golden snapshot within tolerance
+    const compliantHealedRow = [
+      {
+        repo_name: 'public-apis/public-apis',
+        author: 'public-apis',
+        description: 'A collective list of free APIs for use in software and web development.',
+        stars_today: '250 stars today', // Within 20% tolerance of 245
+        total_stars: '312,450',
+        language: 'Python',
+        url: 'https://github.com/public-apis/public-apis',
+      },
+    ];
+
+    const compliantApproveResult = await approveHeal(secondHealResult.attempt.attempt_id, {
+      db,
+      cliExecutor: approveCli,
+      verificationRows: compliantHealedRow,
+    });
+
+    expect(compliantApproveResult.success).toBe(true);
+    expect(compliantApproveResult.attempt.status).toBe('APPROVED');
     expect(breaker.getState('c_heal_test_collector').status).toBe('RECOVERED');
-
-    // 2. Discrepancies are identified and logged
-    expect(approveResult.discrepancies).toBeDefined();
-    expect(approveResult.discrepancies!.length).toBeGreaterThanOrEqual(1);
-
-    const starsDiscrepancy = approveResult.discrepancies!.find((d) => d.field === 'stars_today');
-    expect(starsDiscrepancy).toBeDefined();
-    expect(starsDiscrepancy?.goldenValue).toBe('245 stars today');
-    expect(starsDiscrepancy?.actualValue).toBe('999 stars today');
   });
 });
