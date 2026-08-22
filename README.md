@@ -146,13 +146,24 @@ In automated systems, diagnosing failures with black-box fallbacks hides whether
 
 ## 7. Dashboard & Health Console Visuals
 
-<!-- Note for maintainers: Capture live screenshots prior to submission into docs/screenshots/ -->
+### 💬 Chat & Verified Citations
+Interactive chat showing verified RAG answers with inline source URLs and verified timestamp badges:
 
-| System View | Preview | Description |
-| :--- | :--- | :--- |
-| **Chat & Verified Citations** | ![Chat Tab](docs/screenshots/chat.png) | Interactive chat showing attributed RAG answer with inline source URL and verified timestamp badges. |
-| **Health Console & Active Heal** | ![Health Console](docs/screenshots/health-console.png) | Real-time collector status card, circuit breaker strike counters, and pending heal card with the Gemma provenance badge. |
-| **Incident Replay Timeline** | ![Incident Replay](docs/screenshots/incident-replay.png) | Chronological incident audit trail rendering scrape runs, Sentinel corruption alerts, and golden verification results. |
+![Chat & Verified Citations](docs/screenshots/chat.png)
+
+---
+
+### 🩺 Health Console & Active Heal Management
+Real-time collector status cards, 3-strike circuit breaker metrics, and pending heal cards with Gemma AI diagnosis provenance badges:
+
+![Health Console & Active Heal Management](docs/screenshots/health-console.png)
+
+---
+
+### 📜 Incident Replay Timeline
+Chronological audit trail recording scrape executions, Sentinel corruption alerts, and post-heal golden verification results:
+
+![Incident Replay Timeline](docs/screenshots/incident-replay.png)
 
 ---
 
