@@ -38,7 +38,9 @@ jobs:
           echo "LOG_LEVEL=silent" >> .env
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm rebuild better-sqlite3
 
       - name: Run TypeScript typecheck
         run: npm run typecheck
