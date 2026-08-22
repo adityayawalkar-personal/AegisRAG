@@ -4,6 +4,14 @@
   "description": "Self-healing knowledge pipeline and RAG architecture powered by Bright Data Scraper Studio and local Gemma LLM",
   "type": "module",
   "main": "dist/scraper-runner.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adityayawalkar-personal/AegisRAG.git"
+  },
+  "homepage": "https://github.com/adityayawalkar-personal/AegisRAG#readme",
+  "bugs": {
+    "url": "https://github.com/adityayawalkar-personal/AegisRAG/issues"
+  },
   "scripts": {
     "shift-target": "node shift-target/server.js",
     "server": "tsx src/server/app.ts",

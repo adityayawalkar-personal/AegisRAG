@@ -379,11 +379,43 @@ async function parseJsonBody<T>(req: IncomingMessage): Promise<T> {
   });
 }
 
+function checkPlaceholderCredentials(): void {
+  const placeholders: Record<string, string> = {
+    API_AUTH_SECRET: 'your_secure_random_token_here',
+    BRIGHTDATA_API_KEY: 'your_brightdata_api_key_here',
+    BRIGHTDATA_AI_GATEWAY: 'your_brightdata_ai_gateway_here',
+    HF_TOKEN: 'your_huggingface_token_here',
+  };
+
+  for (const [key, placeholder] of Object.entries(placeholders)) {
+    const val = process.env[key];
+    if (val === placeholder) {
+      console.warn(`[security] ⚠️ Configuration warning: Environment variable '${key}' is set to the default placeholder from .env.example.`);
+    }
+  }
+}
+
 // Start server if executed directly
 if (process.argv[1]?.endsWith('app.ts') || process.argv[1]?.endsWith('app.js')) {
+  checkPlaceholderCredentials();
   const server = createServer();
   server.listen(PORT, () => {
     console.log(`\n🚀 AegisRAG API & Dashboard Server running on http://localhost:${PORT}`);
     console.log(`🔒 API Authentication Secret: ${process.env.API_AUTH_SECRET || 'aegisrag-secret-token-2026'}\n`);
   });
+
+  const handleShutdown = (signal: string) => {
+    console.log(`\n[server] Received ${signal}. Gracefully closing HTTP server...`);
+    server.close(() => {
+      console.log('[server] HTTP server closed cleanly. Exiting.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[server] Forced exit after shutdown timeout.');
+      process.exit(1);
+    }, 5000).unref();
+  };
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }

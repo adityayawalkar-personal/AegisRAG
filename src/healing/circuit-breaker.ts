@@ -60,9 +60,11 @@ export class CircuitBreaker {
     setCollectorState(updated, this.db);
 
     if (shouldTrip) {
-      console.warn(
-        `[circuit-breaker] ⚡ CIRCUIT BREAKER TRIPPED for collector '${collectorId}' (${newFailureCount}/${MAX_CONSECUTIVE_HEAL_FAILURES} failures). Status set to DEGRADED_PERMANENT. ${reason || ''}`
-      );
+      if (process.env.LOG_LEVEL !== 'silent') {
+        console.warn(
+          `[circuit-breaker] ⚡ CIRCUIT BREAKER TRIPPED for collector '${collectorId}' (${newFailureCount}/${MAX_CONSECUTIVE_HEAL_FAILURES} failures). Status set to DEGRADED_PERMANENT. ${reason || ''}`
+        );
+      }
     }
 
     return updated;
@@ -81,7 +83,9 @@ export class CircuitBreaker {
     };
 
     setCollectorState(resetState, this.db);
-    console.log(`[circuit-breaker] 🔄 Circuit breaker manually reset for collector '${collectorId}'. Status: HEALTHY.`);
+    if (process.env.LOG_LEVEL !== 'silent') {
+      console.log(`[circuit-breaker] 🔄 Circuit breaker manually reset for collector '${collectorId}'. Status: HEALTHY.`);
+    }
     return resetState;
   }
 }

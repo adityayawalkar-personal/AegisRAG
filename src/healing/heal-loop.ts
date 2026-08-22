@@ -36,11 +36,19 @@ export interface HealInitiationResult {
   status: 'AWAITING_APPROVAL' | 'FAILED';
 }
 
-/**
- * In-memory mutex tracking active heal processes per collector.
- * Prevents concurrent heal triggers from racing on the same collector.
- */
 const activeHealLocks = new Set<string>();
+
+function logHeal(...args: unknown[]): void {
+  if (process.env.LOG_LEVEL !== 'silent') {
+    console.log(...args);
+  }
+}
+
+function warnHeal(...args: unknown[]): void {
+  if (process.env.LOG_LEVEL !== 'silent') {
+    console.warn(...args);
+  }
+}
 
 export class HealInProgressError extends Error {
   constructor(public collectorId: string) {
@@ -141,7 +149,7 @@ export async function initiateHeal(
     // 2b. Classify failure category (Anti-bot challenges / Soft-failures bypass heal cycle)
     const classification = classifyFailure(sentinelReport.diffSummary || sentinelReport.status);
     if (!classification.shouldHeal) {
-      console.warn(`[heal-loop] ⚠️ Failure classified as '${classification.category}'. Bypassing heal cycle: ${classification.reason}`);
+      warnHeal(`[heal-loop] ⚠️ Failure classified as '${classification.category}'. Bypassing heal cycle: ${classification.reason}`);
       throw new Error(`Cannot initiate heal for failure category '${classification.category}': ${classification.reason}`);
     }
 
@@ -170,7 +178,7 @@ export async function initiateHeal(
       options.gemmaEndpoint
     );
 
-    console.log(`[heal-loop] 🧠 Gemma Diagnosis (${diagnosis.characterCount} chars via ${diagnosis.generatedBy}): "${diagnosis.description}"`);
+    logHeal(`[heal-loop] 🧠 Gemma Diagnosis (${diagnosis.characterCount} chars via ${diagnosis.generatedBy}): "${diagnosis.description}"`);
 
     // 5. Update collector state: (HEALTHY/RECOVERED) -> DEGRADED -> HEALING
     let currentState = breaker.getState(run.collector_id);
@@ -195,7 +203,7 @@ export async function initiateHeal(
     );
 
     // 6. Execute bdata scraper heal with argument array (Standing Rule 1)
-    console.log(`[heal-loop] 🛠️ Invoking CLI heal for collector '${run.collector_id}' on '${run.target_url}'...`);
+    logHeal(`[heal-loop] 🛠️ Invoking CLI heal for collector '${run.collector_id}' on '${run.target_url}'...`);
     
     const healArgs = ['scraper', 'heal', run.collector_id, diagnosis.description, '--url', run.target_url, '--pretty'];
     const { stdout, stderr, exitCode } = await cliExec('heal', healArgs);
@@ -206,7 +214,7 @@ export async function initiateHeal(
 
     if (exitCode !== 0) {
       const errorMsg = `CLI heal exited with code ${exitCode}. Stderr: ${stderr.slice(0, 1000)}`;
-      console.error(`[heal-loop] Heal attempt ${attemptId} failed: ${errorMsg}`);
+      warnHeal(`[heal-loop] Heal attempt ${attemptId} failed: ${errorMsg}`);
 
       const failedAttempt: HealAttemptRecord = {
         attempt_id: attemptId,
@@ -257,7 +265,7 @@ export async function initiateHeal(
 
     insertHealAttempt(awaitingAttempt, db);
 
-    console.log(`[heal-loop] ⏸️ Heal awaiting manual approval (Attempt ID: ${attemptId}). Preview captured.`);
+    logHeal(`[heal-loop] ⏸️ Heal awaiting manual approval (Attempt ID: ${attemptId}). Preview captured.`);
 
     return {
       attempt: awaitingAttempt,
@@ -298,14 +306,14 @@ export async function approveHeal(
     throw new Error(`Cannot approve attempt in status '${attempt.status}'. Must be AWAITING_APPROVAL.`);
   }
 
-  console.log(`[heal-loop] ✅ Approving heal attempt '${attemptId}' for collector '${attempt.collector_id}'...`);
+  logHeal(`[heal-loop] ✅ Approving heal attempt '${attemptId}' for collector '${attempt.collector_id}'...`);
 
   const approveArgs = ['scraper', 'approve', attempt.collector_id];
   const { stderr, exitCode } = await cliExec('approve', approveArgs);
 
   if (exitCode !== 0) {
     const errorMsg = `CLI approve exited with code ${exitCode}. Stderr: ${stderr.slice(0, 1000)}`;
-    console.error(`[heal-loop] Approval failed: ${errorMsg}`);
+    warnHeal(`[heal-loop] Approval failed: ${errorMsg}`);
     updateHealAttempt(attemptId, { status: 'FAILED', error_message: errorMsg, resolved_at: new Date().toISOString() }, db);
     breaker.recordFailure(attempt.collector_id, errorMsg);
     throw new Error(errorMsg);
@@ -334,7 +342,7 @@ export async function approveHeal(
       .map((d) => `${d.field} (Row ${d.rowIndex}): expected ${JSON.stringify(d.goldenValue)}, got ${JSON.stringify(d.actualValue)}`)
       .join('; ')}`;
 
-    console.warn(`[heal-loop] ⚠️ ${errorMsg}. Keeping collector '${attempt.collector_id}' in DEGRADED for re-healing.`);
+    warnHeal(`[heal-loop] ⚠️ ${errorMsg}. Keeping collector '${attempt.collector_id}' in DEGRADED for re-healing.`);
 
     updateHealAttempt(
       attemptId,
@@ -372,7 +380,7 @@ export async function approveHeal(
   breaker.recordSuccess(attempt.collector_id);
 
   const updatedAttempt = getHealAttemptById(attemptId, db)!;
-  console.log(`[heal-loop] 🎉 Heal approved successfully. Collector '${attempt.collector_id}' transitioned to RECOVERED.`);
+  logHeal(`[heal-loop] 🎉 Heal approved successfully. Collector '${attempt.collector_id}' transitioned to RECOVERED.`);
 
   return {
     success: true,
@@ -397,7 +405,7 @@ export async function rejectHeal(
   const attempt = getHealAttemptById(attemptId, db);
   if (!attempt) throw new Error(`Heal attempt '${attemptId}' not found.`);
 
-  console.log(`[heal-loop] ❌ Rejecting heal attempt '${attemptId}' for collector '${attempt.collector_id}'...`);
+  logHeal(`[heal-loop] ❌ Rejecting heal attempt '${attemptId}' for collector '${attempt.collector_id}'...`);
 
   const rejectArgs = ['scraper', 'approve', attempt.collector_id, '--reject'];
   await cliExec('reject', rejectArgs);
@@ -407,7 +415,7 @@ export async function rejectHeal(
   breaker.recordFailure(attempt.collector_id, reason);
 
   const updatedAttempt = getHealAttemptById(attemptId, db)!;
-  console.log(`[heal-loop] Heal rejected. Strike recorded against circuit breaker.`);
+  logHeal(`[heal-loop] Heal rejected. Strike recorded against circuit breaker.`);
 
   return {
     success: true,
