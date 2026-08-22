@@ -390,7 +390,13 @@ function checkPlaceholderCredentials(): void {
   for (const [key, placeholder] of Object.entries(placeholders)) {
     const val = process.env[key];
     if (val === placeholder) {
-      console.warn(`[security] ⚠️ Configuration warning: Environment variable '${key}' is set to the default placeholder from .env.example.`);
+      console.warn(
+        `\n********************************************************************************\n` +
+        `[security] ⚠️ CONFIGURATION WARNING:\n` +
+        `Environment variable '${key}' is set to the default placeholder from .env.example.\n` +
+        `Please update your .env file with authentic credentials before public deployment.\n` +
+        `********************************************************************************\n`
+      );
     }
   }
 }
