@@ -253,7 +253,7 @@ export async function runAllSources(
 }
 
 // CLI entrypoint
-if (process.argv[1] && process.argv[1].endsWith('scraper-runner.ts')) {
+if (!process.env.VITEST && process.argv[1] && process.argv[1].endsWith('scraper-runner.ts')) {
   runAllSources()
     .then((results) => {
       const successful = results.filter(r => r.success).length;

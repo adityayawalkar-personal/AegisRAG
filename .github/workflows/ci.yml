@@ -15,6 +15,9 @@ jobs:
       API_AUTH_SECRET: ci-secret-auth-token-test-2026
       GEMMA_ENDPOINT: http://localhost:8081/completion
       PORT: 3001
+      LOG_LEVEL: silent
+      DOTENV_CONFIG_QUIET: 'true'
+      CI: 'true'
 
     steps:
       - name: Check out repository
@@ -27,7 +30,12 @@ jobs:
           cache: 'npm'
 
       - name: Bootstrap Environment
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          echo "API_AUTH_SECRET=ci-secret-auth-token-test-2026" > .env
+          echo "PORT=3001" >> .env
+          echo "GEMMA_ENDPOINT=http://localhost:8081/completion" >> .env
+          echo "LOG_LEVEL=silent" >> .env
 
       - name: Install dependencies
         run: npm install

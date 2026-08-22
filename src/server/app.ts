@@ -401,8 +401,8 @@ function checkPlaceholderCredentials(): void {
   }
 }
 
-// Start server if executed directly
-if (process.argv[1]?.endsWith('app.ts') || process.argv[1]?.endsWith('app.js')) {
+// Start server if executed directly (and not in Vitest/testing context)
+if (!process.env.VITEST && (process.argv[1]?.endsWith('app.ts') || process.argv[1]?.endsWith('app.js'))) {
   checkPlaceholderCredentials();
   const server = createServer();
   server.listen(PORT, () => {
