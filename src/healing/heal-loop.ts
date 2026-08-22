@@ -203,6 +203,7 @@ export async function initiateHeal(
         attempt_number: attemptNumber,
         created_at: now,
         resolved_at: now,
+        generated_by: diagnosis.generatedBy,
       };
 
       insertHealAttempt(failedAttempt, db);
@@ -235,6 +236,7 @@ export async function initiateHeal(
       attempt_number: attemptNumber,
       created_at: now,
       resolved_at: null,
+      generated_by: diagnosis.generatedBy,
     };
 
     insertHealAttempt(awaitingAttempt, db);

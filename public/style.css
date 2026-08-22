@@ -462,6 +462,37 @@ body {
 .status-degraded { background: var(--accent-rose-bg); color: var(--accent-rose); }
 .status-recovered { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
 
+.gen-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  margin-left: 6px;
+  vertical-align: middle;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.gen-badge-local {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.gen-badge-hf {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.gen-badge-fallback {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+}
+
 .heal-card {
   background: var(--bg-card);
   border: 1px solid var(--accent-amber);

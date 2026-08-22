@@ -7,6 +7,8 @@ import {
   getLatestSuccessfulRuns, 
   getRunById, 
   countRuns,
+  insertHealAttempt,
+  getLatestHealAttempts,
   type RawRunRecord 
 } from '../src/db/database.js';
 
@@ -126,5 +128,42 @@ describe('SQLite Database Layer', () => {
     expect(successfulRuns.length).toBe(2);
     expect(successfulRuns.map(r => r.run_id)).toEqual(['r3', 'r1']);
     expect(countRuns('src-a', db)).toBe(3);
+  });
+
+  it('should insert and retrieve heal_attempts with generated_by metadata', () => {
+    const rawRun: RawRunRecord = {
+      run_id: 'heal-run-1',
+      source_id: 'src-a',
+      collector_id: 'c1',
+      target_url: 'http://test.com',
+      status: 'FAILED',
+      raw_payload: null,
+      row_count: 0,
+      error_message: null,
+      execution_duration_ms: 100,
+      completed_at: new Date().toISOString(),
+    };
+    insertRawRun(rawRun, db);
+
+    insertHealAttempt(
+      {
+        attempt_id: 'att-1',
+        collector_id: 'c1',
+        run_id: 'heal-run-1',
+        heal_description: 'Fix selectors for title',
+        preview_result: '[]',
+        status: 'AWAITING_APPROVAL',
+        error_message: null,
+        attempt_number: 1,
+        created_at: new Date().toISOString(),
+        resolved_at: null,
+        generated_by: 'local_gemma_server',
+      },
+      db
+    );
+
+    const attempts = getLatestHealAttempts('c1', 5, db);
+    expect(attempts.length).toBe(1);
+    expect(attempts[0].generated_by).toBe('local_gemma_server');
   });
 });

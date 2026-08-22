@@ -143,7 +143,12 @@ export function createServer(customDb?: ReturnType<typeof getDatabase>): http.Se
             timestamp: h.created_at,
             type: 'HEAL_DIAGNOSIS',
             title: `Gemma Diagnosis Generated (Attempt #${h.attempt_number})`,
-            details: { attemptId: h.attempt_id, description: h.heal_description, status: h.status },
+            details: {
+              attemptId: h.attempt_id,
+              description: h.heal_description,
+              status: h.status,
+              generatedBy: h.generated_by || 'deterministic_fallback',
+            },
           });
           if (h.resolved_at) {
             events.push({

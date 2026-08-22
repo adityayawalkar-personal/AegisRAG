@@ -41,6 +41,7 @@ export interface HealAttemptRecord {
   attempt_number: number;
   created_at: string;
   resolved_at: string | null;
+  generated_by?: string | null;
 }
 
 export interface CollectorStateRecord {
@@ -132,6 +133,7 @@ export function initSchema(db: DatabaseType): void {
       attempt_number INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       resolved_at TEXT,
+      generated_by TEXT,
       FOREIGN KEY (run_id) REFERENCES raw_runs(run_id) ON DELETE CASCADE
     );
 
@@ -183,6 +185,12 @@ export function initSchema(db: DatabaseType): void {
     CREATE INDEX IF NOT EXISTS idx_chunks_parent_id 
     ON chunks_index(parent_id);
   `);
+
+  // Migration guard for existing heal_attempts tables
+  const healColumns = db.pragma('table_info(heal_attempts)') as Array<{ name: string }>;
+  if (healColumns.length > 0 && !healColumns.some((c) => c.name === 'generated_by')) {
+    db.exec(`ALTER TABLE heal_attempts ADD COLUMN generated_by TEXT;`);
+  }
 }
 
 export function insertRawRun(record: RawRunRecord, db: DatabaseType = getDatabase()): void {
@@ -212,16 +220,20 @@ export function insertRunStatus(record: RunStatusRecord, db: DatabaseType = getD
 }
 
 export function insertHealAttempt(record: HealAttemptRecord, db: DatabaseType = getDatabase()): void {
+  const sanitized = {
+    ...record,
+    generated_by: record.generated_by || null,
+  };
   const stmt = db.prepare(`
     INSERT INTO heal_attempts (
       attempt_id, collector_id, run_id, heal_description, preview_result,
-      status, error_message, attempt_number, created_at, resolved_at
+      status, error_message, attempt_number, created_at, resolved_at, generated_by
     ) VALUES (
       @attempt_id, @collector_id, @run_id, @heal_description, @preview_result,
-      @status, @error_message, @attempt_number, @created_at, @resolved_at
+      @status, @error_message, @attempt_number, @created_at, @resolved_at, @generated_by
     )
   `);
-  stmt.run(record);
+  stmt.run(sanitized);
 }
 
 export function updateHealAttempt(
