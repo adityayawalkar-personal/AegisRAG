@@ -89,7 +89,7 @@ Bright Data's **Scraper Studio** provides browser automation, cloud execution, a
 - **Active Collector ID**: `c_msytsxke2c5eegz5we` (Configured in [`config/sources.json`](file:///config/sources.json) targeting `https://github.com/trending`).
 
 ### 3. AI Agent vs. Hand-Written Division of Labor
-| Subsystem | What Bright Data Scraper Studio Generates | What We Built by Hand |
+| Subsystem | What Bright Data Scraper Studio Generates | What Was Hand-Built by Developer (Aditya Yawalkar) |
 | :--- | :--- | :--- |
 | **Extraction Engine** | Dynamic selector synthesis, cloud browser instances, proxy rotation, and extraction scripts. | Safe direct CLI execution runner ([`src/scraper-runner.ts`](file:///src/scraper-runner.ts)), timeout handling, and SQLite raw run logging. |
 | **Validation & Healing** | Interactive code repair candidates (`preview_result` payload). | **The Sentinel** validation engine, 5-run rolling median baselines, `BLOCKED` classification, Gemma diagnosis client, golden-row tolerance gating, 3-strike circuit breaker, and state machine. |
@@ -266,23 +266,25 @@ Judges can verify each subsystem independently using dedicated audit scripts:
 
 ## 11. AI Tool-Use & Authorship Disclosure
 
-| File / Module | Authorship Category | Human Design & Implementation Role |
+In compliance with hackathon submission guidelines, the following table details the authorship, tool assistance, and implementation role of the developer (**Aditya Yawalkar**):
+
+| File / Module | Authorship Category | Implementation & Customization Role (Aditya Yawalkar) |
 | :--- | :--- | :--- |
-| `src/sentinel/sentinel.ts` | **Heavily Edited by Us** | Designed the 20% noise threshold gate, baseline median comparison, and database reporting. |
-| `src/sentinel/rules/*.ts` | **Hand-Written by Us** | Implemented modular validation rule interfaces (`type-range`, `baseline-drift`, `soft-failure`, `structured-data`). |
-| `src/healing/failure-classifier.ts`| **Hand-Written by Us** | Built anti-bot `BLOCKED` classification and exponential backoff retry handler for 429/5xx errors. |
-| `src/healing/golden-comparison.ts`| **Hand-Written by Us** | Authored field-level golden snapshot comparison, numeric tolerance bands (20%), and coverage breakdown. |
-| `src/healing/circuit-breaker.ts`| **Hand-Written by Us** | Implemented 3-strike state machine and permanent degradation lockout protection. |
-| `src/healing/gemma-client.ts` | **Heavily Edited by Us** | Prompt engineering for local Gemma 4 E2B inference, character length (<900 char) enforcement, and XML sandboxing. |
-| `src/healing/heal-loop.ts` | **Hand-Written by Us** | Implemented direct Node CLI execution (`shell: false`), collector mutex lock, and operator approval gate. |
-| `src/indexing/chunking.ts` | **Hand-Written by Us** | Hierarchical document section parser with parent pointer preservation (~500 tokens / 100 overlap). |
-| `src/indexing/pii-filter.ts` | **Hand-Written by Us** | Pre-embedding regex sanitizer for emails, phone numbers, and SSNs. |
-| `src/indexing/bm25.ts` | **Hand-Written by Us** | Pure TypeScript implementation of the Okapi BM25 sparse keyword ranking algorithm. |
-| `src/indexing/index-store.ts` | **Hand-Written by Us** | Dual store manager with Sentinel quality gate and automatic stale-chunk purging on schema version bumps. |
-| `src/retrieval/rag-service.ts`| **Hand-Written by Us** | Sandboxed prompt template, citation regex parser, and unanswerable query refusal logic. |
-| `src/server/app.ts` | **Hand-Written by Us** | REST API endpoints, graceful shutdown handlers (SIGTERM/SIGINT), and startup environment checks. |
-| `public/app.js` & `style.css` | **Heavily Edited by Us** | Interactive dashboard UI, provenance badges, confirmation dialogs, and live incident timeline. |
-| `tests/*.test.ts` (13 test files) | **Heavily Edited by Us** | 53 unit and integration tests covering edge cases, state machine transitions, and concurrency locks. |
+| `src/sentinel/sentinel.ts` | **Heavily Edited & Refactored by Developer** | Designed the 20% noise threshold gate, baseline median comparison, and database reporting. |
+| `src/sentinel/rules/*.ts` | **Hand-Written by Developer** | Implemented modular validation rule interfaces (`type-range`, `baseline-drift`, `soft-failure`, `structured-data`). |
+| `src/healing/failure-classifier.ts`| **Hand-Written by Developer** | Built anti-bot `BLOCKED` classification and exponential backoff retry handler for 429/5xx errors. |
+| `src/healing/golden-comparison.ts`| **Hand-Written by Developer** | Authored field-level golden snapshot comparison, numeric tolerance bands (20%), and coverage breakdown. |
+| `src/healing/circuit-breaker.ts`| **Hand-Written by Developer** | Implemented 3-strike state machine and permanent degradation lockout protection. |
+| `src/healing/gemma-client.ts` | **Heavily Edited & Refactored by Developer** | Prompt engineering for local Gemma 4 E2B inference, character length (<900 char) enforcement, and XML sandboxing. |
+| `src/healing/heal-loop.ts` | **Hand-Written by Developer** | Implemented direct Node CLI execution (`shell: false`), collector mutex lock, and operator approval gate. |
+| `src/indexing/chunking.ts` | **Hand-Written by Developer** | Hierarchical document section parser with parent pointer preservation (~500 tokens / 100 overlap). |
+| `src/indexing/pii-filter.ts` | **Hand-Written by Developer** | Pre-embedding regex sanitizer for emails, phone numbers, and SSNs. |
+| `src/indexing/bm25.ts` | **Hand-Written by Developer** | Pure TypeScript implementation of the Okapi BM25 sparse keyword ranking algorithm. |
+| `src/indexing/index-store.ts` | **Hand-Written by Developer** | Dual store manager with Sentinel quality gate and automatic stale-chunk purging on schema version bumps. |
+| `src/retrieval/rag-service.ts`| **Hand-Written by Developer** | Sandboxed prompt template, citation regex parser, and unanswerable query refusal logic. |
+| `src/server/app.ts` | **Hand-Written by Developer** | REST API endpoints, graceful shutdown handlers (SIGTERM/SIGINT), and startup environment checks. |
+| `public/app.js` & `style.css` | **Heavily Edited & Refactored by Developer** | Interactive dashboard UI, provenance badges, confirmation dialogs, and live incident timeline. |
+| `tests/*.test.ts` (13 test files) | **Heavily Edited & Refactored by Developer** | 53 unit and integration tests covering edge cases, state machine transitions, and concurrency locks. |
 
 ---
 
