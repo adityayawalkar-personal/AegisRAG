@@ -25,6 +25,18 @@ describe('Failure Classifier & Transient Retry Loop', () => {
     expect(authErr.shouldHeal).toBe(false);
   });
 
+  it('classifies anti-bot challenges, CAPTCHAs, and soft failures as BLOCKED (bypasses heal)', () => {
+    const blockWall = classifyFailure('Soft failure detected: Output resembles Cloudflare block wall or CAPTCHA (Attention Required! | Cloudflare)');
+    expect(blockWall.category).toBe('BLOCKED');
+    expect(blockWall.isRetryable).toBe(true);
+    expect(blockWall.shouldHeal).toBe(false); // Does NOT trigger heal
+    expect(blockWall.reason).toContain('Anti-bot challenge');
+
+    const captcha = classifyFailure('Security check: Please solve the CAPTCHA to proceed', 403);
+    expect(captcha.category).toBe('BLOCKED');
+    expect(captcha.shouldHeal).toBe(false);
+  });
+
   it('classifies DOM redesign and schema breaks as SCHEMA_CORRUPTED (route to heal)', () => {
     const schemaErr = classifyFailure('Schema corrupted: missing expected field title');
     expect(schemaErr.category).toBe('SCHEMA_CORRUPTED');

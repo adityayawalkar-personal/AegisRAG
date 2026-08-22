@@ -19,6 +19,7 @@ import { CircuitBreaker, CircuitBreakerTrippedError } from './circuit-breaker.js
 import { generateHealDescription, type GemmaDiagnosisResult } from './gemma-client.js';
 import { validateStateTransition } from './state-machine.js';
 import { compareAgainstGoldenSnapshot, type GoldenDiscrepancy } from './golden-comparison.js';
+import { classifyFailure } from './failure-classifier.js';
 
 export { compareAgainstGoldenSnapshot, type GoldenDiscrepancy };
 
@@ -135,6 +136,13 @@ export async function initiateHeal(
     if (breaker.isTripped(run.collector_id)) {
       const state = breaker.getState(run.collector_id);
       throw new CircuitBreakerTrippedError(run.collector_id, state.consecutive_failures);
+    }
+
+    // 2b. Classify failure category (Anti-bot challenges / Soft-failures bypass heal cycle)
+    const classification = classifyFailure(sentinelReport.diffSummary || sentinelReport.status);
+    if (!classification.shouldHeal) {
+      console.warn(`[heal-loop] ⚠️ Failure classified as '${classification.category}'. Bypassing heal cycle: ${classification.reason}`);
+      throw new Error(`Cannot initiate heal for failure category '${classification.category}': ${classification.reason}`);
     }
 
     // 3. Load source configuration (Strict: throws if source config missing)

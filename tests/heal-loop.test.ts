@@ -240,4 +240,25 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
     expect(compliantApproveResult.attempt.status).toBe('APPROVED');
     expect(breaker.getState('c_heal_test_collector').status).toBe('RECOVERED');
   });
+
+  it('routes BLOCKED / soft-failure CAPTCHA reports away from initiateHeal without invoking CLI heal', async () => {
+    const mockCli = vi.fn();
+    const blockedReport: SentinelReport = {
+      runId: 'run-blocked-999',
+      sourceId: 'github-trending',
+      status: 'SOFT_FAILURE',
+      failedFields: ['product_page_url', 'trending_repositories'],
+      diffSummary: 'Soft failure detected: Output resembles Cloudflare challenge or bot wall. Near-duplicate content detected.',
+      metrics: { totalRows: 1, failedFieldsCount: 2, failureRatePct: 100, ruleBreakdowns: {} },
+      ruleResults: [],
+      validatedAt: new Date().toISOString(),
+    };
+
+    await expect(
+      initiateHeal(mockRun, blockedReport, { db, cliExecutor: mockCli })
+    ).rejects.toThrow(/Cannot initiate heal for failure category 'BLOCKED'/);
+
+    // CLI heal must NOT have been called (wasting credits prevented)
+    expect(mockCli).not.toHaveBeenCalled();
+  });
 });

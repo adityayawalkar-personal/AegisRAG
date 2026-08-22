@@ -1,4 +1,4 @@
-export type FailureCategory = 'TRANSIENT_RETRYABLE' | 'SCHEMA_CORRUPTED' | 'AUTH_PERMISSION' | 'FATAL';
+export type FailureCategory = 'TRANSIENT_RETRYABLE' | 'SCHEMA_CORRUPTED' | 'AUTH_PERMISSION' | 'BLOCKED' | 'FATAL';
 
 export interface ClassificationResult {
   category: FailureCategory;
@@ -17,10 +17,8 @@ export function classifyFailure(
   // 1. Auth & Permission Errors (Standing Rule 4: Stop and report)
   if (
     statusCode === 401 ||
-    statusCode === 403 ||
     message.includes('invalid credentials') ||
     message.includes('unauthorized') ||
-    message.includes('forbidden') ||
     message.includes('no api key found')
   ) {
     return {
@@ -32,7 +30,30 @@ export function classifyFailure(
     };
   }
 
-  // 2. Transient / Network / Rate Limit Errors (Retry with backoff, DO NOT heal)
+  // 2. Anti-Bot Challenges, CAPTCHA, or Block Walls (Soft Failure: Route away from heal)
+  if (
+    statusCode === 403 ||
+    message.includes('soft failure') ||
+    message.includes('soft_failure') ||
+    message.includes('captcha') ||
+    message.includes('cloudflare') ||
+    message.includes('attention required') ||
+    message.includes('just a moment') ||
+    message.includes('security check') ||
+    message.includes('bot detected') ||
+    message.includes('near-duplicate') ||
+    message.includes('challenge-platform')
+  ) {
+    return {
+      category: 'BLOCKED',
+      isRetryable: true,
+      shouldHeal: false, // Bypasses initiateHeal to prevent corrupting selectors on block pages
+      reason: 'Anti-bot challenge, CAPTCHA, or block page detected (Soft Failure). Bypassing self-healing loop to prevent selector corruption; route to proxy rotation/backoff.',
+      statusCode: statusCode || 403,
+    };
+  }
+
+  // 3. Transient / Network / Rate Limit Errors (Retry with backoff, DO NOT heal)
   if (
     statusCode === 429 ||
     statusCode === 502 ||
@@ -57,7 +78,7 @@ export function classifyFailure(
     };
   }
 
-  // 3. Schema & Data Shape Break (Target for Sentinel & Heal Loop)
+  // 4. Schema & Data Shape Break (Target for Sentinel & Heal Loop)
   if (
     message.includes('schema') ||
     message.includes('missing field') ||
