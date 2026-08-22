@@ -1,20 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import { AddressInfo } from 'node:net';
 import { createServer } from '../src/server/app.js';
-import { initSchema, insertRawRun, insertRunStatus, type RawRunRecord, type RunStatusRecord } from '../src/db/database.js';
+import { createTestDatabase, insertRawRun, insertRunStatus, type RawRunRecord, type RunStatusRecord, type DatabaseType } from '../src/db/database.js';
 import { getAuthSecret } from '../src/server/auth.js';
 
 describe('Server REST API Endpoints & Auth Gate', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
   let server: ReturnType<typeof createServer>;
   let baseUrl: string;
 
   beforeEach(async () => {
     process.env.API_AUTH_SECRET = 'test-token-secret-12345';
 
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
 
     const healthyRun: RawRunRecord = {
       run_id: 'api-test-run-1',

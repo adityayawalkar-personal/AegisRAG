@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import { runCollector } from '../src/scraper-runner.js';
-import { initSchema, getRunById } from '../src/db/database.js';
+import { createTestDatabase, getRunById, type DatabaseType } from '../src/db/database.js';
 import { type SourceConfig } from '../src/config/sources.js';
 
 describe('Safe Scraper Runner Service', () => {
-  let memoryDb: ReturnType<typeof Database>;
+  let memoryDb: DatabaseType;
 
   const mockSource: SourceConfig = {
     source_id: 'test-feed',
@@ -21,8 +20,7 @@ describe('Safe Scraper Runner Service', () => {
   };
 
   beforeEach(() => {
-    memoryDb = new Database(':memory:');
-    initSchema(memoryDb);
+    memoryDb = createTestDatabase();
   });
 
   afterEach(() => {

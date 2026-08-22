@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { 
+  createTestDatabase,
   initSchema, 
   insertRawRun, 
   insertRunStatus, 
   type RawRunRecord, 
-  type RunStatusRecord 
+  type RunStatusRecord,
+  type DatabaseType 
 } from '../src/db/database.js';
 import { IndexStore } from '../src/indexing/index-store.js';
 import { retrieveHybridContext, cosineSimilarity } from '../src/retrieval/retrieve.js';
@@ -19,12 +20,11 @@ import {
 } from '../src/retrieval/rag-service.js';
 
 describe('Hybrid Retrieval & RAG Citation Enforcement', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
   let indexStore: IndexStore;
 
   beforeEach(() => {
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
 
     const fixturePath = path.join(process.cwd(), 'fixtures', 'golden-run.json');
     const goldenPayload = fs.readFileSync(fixturePath, 'utf-8');

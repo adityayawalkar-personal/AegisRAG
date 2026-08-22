@@ -1,6 +1,14 @@
-import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import BetterSqlite3, { type Database as BetterSqliteDatabase } from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
+
+export type DatabaseType = BetterSqliteDatabase;
+
+const createDatabase = (
+  typeof BetterSqlite3 === 'function'
+    ? BetterSqlite3
+    : (BetterSqlite3 as unknown as { default: typeof BetterSqlite3 }).default
+);
 
 export type RunStatusType = 'HEALTHY' | 'DIVERGENT' | 'SOFT_FAILURE' | 'SCHEMA_CORRUPTED' | 'FAILED';
 export type CollectorStateType = 'HEALTHY' | 'DEGRADED' | 'HEALING' | 'RECOVERED' | 'DEGRADED_PERMANENT';
@@ -94,7 +102,7 @@ export function getDatabase(dbPath?: string): DatabaseType {
     }
   }
 
-  const db = new Database(effectivePath);
+  const db = new createDatabase(effectivePath);
   if (effectivePath !== ':memory:') {
     db.pragma('journal_mode = WAL');
   }
@@ -106,6 +114,13 @@ export function getDatabase(dbPath?: string): DatabaseType {
     defaultDbInstance = db;
   }
 
+  return db;
+}
+
+export function createTestDatabase(): DatabaseType {
+  const db = new createDatabase(':memory:');
+  db.pragma('foreign_keys = ON');
+  initSchema(db);
   return db;
 }
 

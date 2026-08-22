@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import Database from 'better-sqlite3';
 import { initiateHeal, approveHeal, rejectHeal, HealInProgressError } from '../src/healing/heal-loop.js';
 import { CircuitBreaker, CircuitBreakerTrippedError } from '../src/healing/circuit-breaker.js';
-import { initSchema, insertRawRun, type RawRunRecord } from '../src/db/database.js';
+import { createTestDatabase, insertRawRun, type RawRunRecord, type DatabaseType } from '../src/db/database.js';
 import { type SentinelReport } from '../src/sentinel/types.js';
 
 describe('The Self-Healing Loop & Circuit Breaker', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
 
   const mockRun: RawRunRecord = {
     run_id: 'run-corrupted-123',
@@ -33,8 +32,7 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
   };
 
   beforeEach(() => {
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
     insertRawRun(mockRun, db);
   });
 

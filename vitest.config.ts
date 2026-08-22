@@ -11,6 +11,11 @@ export default defineConfig({
     fileParallelism: false,
     maxWorkers: 1,
     isolate: true,
+    server: {
+      deps: {
+        external: ['better-sqlite3'],
+      },
+    },
     testTimeout: 30000,
     hookTimeout: 30000,
     env: {

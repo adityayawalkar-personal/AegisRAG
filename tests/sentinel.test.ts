@@ -1,13 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Sentinel, validateRun } from '../src/sentinel/sentinel.js';
-import { initSchema, insertRawRun, getRunStatusByRunId, type RawRunRecord } from '../src/db/database.js';
+import { createTestDatabase, insertRawRun, getRunStatusByRunId, type RawRunRecord, type DatabaseType } from '../src/db/database.js';
 import { type SourceConfig } from '../src/config/sources.js';
 
 describe('The Sentinel — Accuracy & Validation Layer', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
 
   const testConfig: SourceConfig = {
     source_id: 'test-source',
@@ -32,8 +31,7 @@ describe('The Sentinel — Accuracy & Validation Layer', () => {
   };
 
   beforeEach(() => {
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
 
     // Seed 5 historical runs into memoryDb to form a stable baseline
     for (let i = 0; i < 5; i++) {

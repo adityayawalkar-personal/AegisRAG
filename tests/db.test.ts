@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import { 
+  createTestDatabase,
   initSchema, 
   insertRawRun, 
   getLatestRuns, 
@@ -11,16 +11,15 @@ import {
   getLatestHealAttempts,
   saveGoldenRows,
   getGoldenRows,
-  type RawRunRecord 
+  type RawRunRecord,
+  type DatabaseType
 } from '../src/db/database.js';
 
 describe('SQLite Database Layer', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
 
   beforeEach(() => {
-    // In-memory test database
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
   });
 
   afterEach(() => {

@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import { runCollector } from '../src/scraper-runner.js';
-import { initSchema, getRunById } from '../src/db/database.js';
+import { createTestDatabase, getRunById, type DatabaseType } from '../src/db/database.js';
 import { classifyFailure } from '../src/healing/failure-classifier.js';
 import { type SourceConfig } from '../src/config/sources.js';
 
 describe('Synthetic Failure Test Harness', () => {
-  let memoryDb: ReturnType<typeof Database>;
+  let memoryDb: DatabaseType;
 
   const mockSource: SourceConfig = {
     source_id: 'synthetic-test-source',
@@ -22,8 +21,7 @@ describe('Synthetic Failure Test Harness', () => {
   };
 
   beforeEach(() => {
-    memoryDb = new Database(':memory:');
-    initSchema(memoryDb);
+    memoryDb = createTestDatabase();
   });
 
   afterEach(() => {

@@ -1,23 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { IndexStore } from '../src/indexing/index-store.js';
 import { 
+  createTestDatabase,
   initSchema, 
   insertRawRun, 
   insertRunStatus, 
   getChunksByCollector,
   type RawRunRecord, 
-  type RunStatusRecord 
+  type RunStatusRecord,
+  type DatabaseType 
 } from '../src/db/database.js';
 
 describe('IndexStore & Stale-Chunk Self-Cleaning', () => {
-  let db: ReturnType<typeof Database>;
+  let db: DatabaseType;
 
   beforeEach(() => {
-    db = new Database(':memory:');
-    initSchema(db);
+    db = createTestDatabase();
   });
 
   afterEach(() => {
