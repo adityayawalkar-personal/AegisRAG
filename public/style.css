@@ -147,6 +147,58 @@ body {
   background: var(--accent-emerald);
 }
 
+/* Collector & Pipeline Summary Ribbon */
+.pipeline-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 18px;
+  font-size: 12px;
+}
+
+.ribbon-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ribbon-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ribbon-code {
+  background: var(--bg-secondary);
+  color: var(--accent-indigo);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--border);
+}
+
+.ribbon-val {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ribbon-badge-pill {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ribbon-badge-pill.green {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+}
+
 /* Navigation Tabs */
 .app-nav {
   display: flex;
