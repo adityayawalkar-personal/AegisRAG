@@ -76,13 +76,14 @@ flowchart TD
         StatusDecision -- "SCHEMA_CORRUPTED\n(>20% Field Failure)" --> GemmaDiagnosis["Local Gemma 4 E2B LLM\n(src/healing/gemma-client.ts)\nPlain-Language Diagnosis <900 chars"]
         
         GemmaDiagnosis --> HealExec["bdata scraper heal\n(src/healing/heal-loop.ts)"]
-        HealExec --> ApprovalGate["Operator Approval Gate\n(Manual approve / reject)"]
-        ApprovalGate -- "approveHeal()" --> GoldenGate["Golden-Row Verification Gate\n(src/healing/golden-comparison.ts)\nExact Match & 20% Variance Band"]
+        HealExec --> PreviewEnvelope["Capture Candidate Preview\n(Awaiting Approval Envelope)"]
+        PreviewEnvelope --> GoldenGate{"Pre-Approval Golden Gate\n(src/healing/golden-comparison.ts)\nExact Match & 20% Variance Band"}
         
-        GoldenGate -- "Tolerance Breached" --> DegradedHold["Hold Collector in DEGRADED\nFeed Feedback to Next Gemma Attempt"]
+        GoldenGate -- "Tolerance Breached" --> DegradedHold["Reject & Block CLI Approval\nHold in DEGRADED → Feedback to Next Heal"]
         DegradedHold --> GemmaDiagnosis
         
-        GoldenGate -- "Verified Compliant" --> RecoveredState["Transition to RECOVERED\n(src/healing/state-machine.ts)"]
+        GoldenGate -- "Verified Pass" --> ApprovalGate["bdata scraper approve\n(Live CLI Production Update)"]
+        ApprovalGate --> RecoveredState["Transition to RECOVERED\n(SAME Collector ID Preserved)"]
     end
 
     subgraph STAGE_2["Stage 2: Structure-Preserving Indexing & Verifiable RAG"]
@@ -292,15 +293,13 @@ npm run eval
 npm run typecheck
 ```
 
-### Reproducible Milestone Scripts
+### Reproducible Milestone & Demo Scripts
 Judges can verify each subsystem independently using dedicated audit scripts:
-- `npm run verify:day2`: Verifies SQLite schema persistence, error isolation, and Zod configuration loading.
-- `npm run verify:day3`: Exercises Sentinel multi-rule validation, 5-run median calculation, and 20% noise threshold.
-- `npm run verify:day4`: Tests Gemma prompt construction, circuit breaker strike progression, and CLI argument safety.
-- `npm run verify:day5`: Tests hierarchical chunking, PII redaction, Okapi BM25 indexing, and stale chunk invalidation.
-- `npm run verify:day6`: Tests hybrid RRF retrieval, deterministic citation verification, and unauthorized query rejection.
+- `npm run demo`: **Live Bright Data Demo** — Runs live extraction, sabotage simulation, Gemma diagnosis, real `bdata scraper heal`, Pre-Approval Golden Gate, and live recovery.
+- `npm run demo:mock`: **Deterministic Mock Demo** — Runs the complete 7-stage self-heal loop offline in simulated sandbox mode.
+- `npm run benchmark`: Runs the 6-scenario reliability benchmark testing DOM redesigns, nesting shifts, null expansions, bot challenges, and flaky repairs.
 - `npm run eval`: Runs automated held-out evaluation benchmark comparing RRF Hybrid vs Dense vs BM25.
-- `npm run demo`: Complete 7-stage live sabotage simulation, local Gemma repair, operator approval, and knowledge base recovery.
+- `npm run verify:day2` to `npm run verify:day5`: Tests database persistence, Sentinel baseline rules, Gemma CLI safety, chunking, and BM25 indexing.
 
 ---
 
