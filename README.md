@@ -13,7 +13,7 @@ A continuous accuracy validation and human-in-the-loop self-healing extraction p
 
 ---
 
-## 1. Why AegisRAG? (The 10-Second Pitch)
+## 1. Why AegisRAG?
 
 ```text
 Traditional Web Scraping Pipeline:
