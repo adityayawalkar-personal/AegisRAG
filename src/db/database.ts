@@ -353,6 +353,23 @@ export function setCollectorState(
   stmt.run(record);
 }
 
+export function setCollectorStatus(
+  collectorId: string,
+  status: CollectorStateType,
+  db: DatabaseType = getDatabase()
+): void {
+  const current = getCollectorState(collectorId, db);
+  setCollectorState(
+    {
+      ...current,
+      status,
+      consecutive_failures: status === 'HEALTHY' || status === 'RECOVERED' ? 0 : current.consecutive_failures,
+      updated_at: new Date().toISOString(),
+    },
+    db
+  );
+}
+
 export function insertChunks(chunks: ChunkRecord[], db: DatabaseType = getDatabase()): void {
   if (chunks.length === 0) return;
 

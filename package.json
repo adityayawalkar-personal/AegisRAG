@@ -23,8 +23,12 @@
     "verify:day3": "tsx src/scripts/verify-day3.ts",
     "verify:day4": "tsx src/scripts/verify-day4.ts",
     "verify:day5": "tsx src/scripts/verify-day5.ts",
-    "verify:day6": "tsx src/scripts/verify-day6.ts",
     "eval": "tsx src/scripts/run-eval.ts",
+    "benchmark": "tsx benchmarks/run-benchmarks.ts",
+    "demo:reset": "tsx src/scripts/demo-reset.ts",
+    "demo:break": "tsx src/scripts/demo-break.ts",
+    "demo:heal": "tsx src/scripts/demo-heal.ts",
+    "demo:verify": "tsx src/scripts/demo-verify.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

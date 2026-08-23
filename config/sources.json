@@ -12,6 +12,16 @@
       "product_page_url": "url",
       "trending_repositories": "array"
     },
+    "field_policies": {
+      "product_page_url": {
+        "category": "structural",
+        "policy": "strict"
+      },
+      "trending_repositories": {
+        "category": "structural",
+        "policy": "strict"
+      }
+    },
     "validation_thresholds": {
       "baseline_window": 5,
       "corruption_threshold_pct": 20,

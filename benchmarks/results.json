@@ -1,0 +1,90 @@
+{
+  "totalScenarios": 6,
+  "detectionRatePct": 100,
+  "healingRecoveryRatePct": 100,
+  "goldenGateAccuracyPct": 100,
+  "collectorIdPreservationPct": 100,
+  "corruptedIngestionPreventionPct": 100,
+  "averageRecoveryLatencyMs": 30,
+  "benchmarkedAt": "2026-08-23T17:29:01.814Z",
+  "results": [
+    {
+      "scenarioId": "SCENARIO-01",
+      "name": "CSS Class Hierarchy Renamed",
+      "category": "dom_redesign",
+      "sentinelDetected": true,
+      "sentinelStatus": "SCHEMA_CORRUPTED",
+      "diagnosisGenerated": true,
+      "healAttempted": true,
+      "goldenVerificationPassed": true,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 131
+    },
+    {
+      "scenarioId": "SCENARIO-02",
+      "name": "Card Container Nesting Shifted",
+      "category": "nesting_shift",
+      "sentinelDetected": true,
+      "sentinelStatus": "SCHEMA_CORRUPTED",
+      "diagnosisGenerated": true,
+      "healAttempted": true,
+      "goldenVerificationPassed": true,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 13
+    },
+    {
+      "scenarioId": "SCENARIO-03",
+      "name": "Critical Required Field Nullified",
+      "category": "null_expansion",
+      "sentinelDetected": true,
+      "sentinelStatus": "SCHEMA_CORRUPTED",
+      "diagnosisGenerated": true,
+      "healAttempted": true,
+      "goldenVerificationPassed": true,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 11
+    },
+    {
+      "scenarioId": "SCENARIO-04",
+      "name": "Semantic Content Type Drift (Price into URL)",
+      "category": "semantic_corruption",
+      "sentinelDetected": true,
+      "sentinelStatus": "SCHEMA_CORRUPTED",
+      "diagnosisGenerated": true,
+      "healAttempted": true,
+      "goldenVerificationPassed": true,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 11
+    },
+    {
+      "scenarioId": "SCENARIO-05",
+      "name": "Anti-Bot Cloudflare Challenge Interception (HTTP 403 / Bot Wall)",
+      "category": "bot_challenge",
+      "sentinelDetected": true,
+      "sentinelStatus": "SOFT_FAILURE",
+      "diagnosisGenerated": false,
+      "healAttempted": false,
+      "goldenVerificationPassed": false,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 1
+    },
+    {
+      "scenarioId": "SCENARIO-06",
+      "name": "Flaky AI Selector Repair (Breaches Golden Numeric Tolerance by >300%)",
+      "category": "flaky_ai_repair",
+      "sentinelDetected": true,
+      "sentinelStatus": "SCHEMA_CORRUPTED",
+      "diagnosisGenerated": true,
+      "healAttempted": true,
+      "goldenVerificationPassed": false,
+      "collectorIdPreserved": true,
+      "downstreamCorruptedIngestionPrevented": true,
+      "durationMs": 10
+    }
+  ]
+}

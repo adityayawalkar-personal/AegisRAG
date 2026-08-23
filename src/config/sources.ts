@@ -5,6 +5,19 @@ import path from 'node:path';
 export const FieldTypeSchema = z.enum(['string', 'number', 'boolean', 'url', 'array', 'object', 'date']);
 export type FieldType = z.infer<typeof FieldTypeSchema>;
 
+export const FieldCategorySchema = z.enum(['structural', 'semantic', 'dynamic_numeric']);
+export type FieldCategory = z.infer<typeof FieldCategorySchema>;
+
+export const VerificationPolicySchema = z.enum(['strict', 'numeric_tolerance', 'presence_only', 'distribution']);
+export type VerificationPolicy = z.infer<typeof VerificationPolicySchema>;
+
+export const FieldPolicySchema = z.object({
+  category: FieldCategorySchema.default('structural'),
+  policy: VerificationPolicySchema.default('strict'),
+  tolerance_pct: z.number().min(0).max(100).optional(),
+});
+export type FieldPolicy = z.infer<typeof FieldPolicySchema>;
+
 export const ValidationThresholdsSchema = z.object({
   baseline_window: z.number().int().positive().default(5),
   corruption_threshold_pct: z.number().min(1).max(100).default(20),
@@ -19,6 +32,7 @@ export const SourceConfigSchema = z.object({
   collector_id: z.string().min(1),
   expected_fields: z.array(z.string().min(1)),
   field_types: z.record(z.string(), FieldTypeSchema).optional(),
+  field_policies: z.record(z.string(), FieldPolicySchema).optional(),
   validation_thresholds: ValidationThresholdsSchema.default({
     baseline_window: 5,
     corruption_threshold_pct: 20,
