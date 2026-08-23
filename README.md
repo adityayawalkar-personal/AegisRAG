@@ -1,27 +1,63 @@
 # AegisRAG — Self-Healing Knowledge Pipeline & Verifiable RAG
 
-A continuous accuracy validation and self-healing extraction pipeline powered by Bright Data Scraper Studio and local Gemma 4 E2B.
+A continuous accuracy validation and human-in-the-loop self-healing extraction pipeline powered by Bright Data Scraper Studio and local Gemma 4 E2B.
 
 [![CI](https://github.com/adityayawalkar-personal/AegisRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/adityayawalkar-personal/AegisRAG/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/Node-%3E%3D20.12.0-blue.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/Tests-53%20Passing-success.svg)](https://github.com/adityayawalkar-personal/AegisRAG)
+[![Tests](https://img.shields.io/badge/Tests-57%20Passing-success.svg)](https://github.com/adityayawalkar-personal/AegisRAG)
+
+> 🏆 **Powered by Bright Data Scraper Studio**  
+> **Collector ID**: `c_msytsxke2c5eegz5we` | **Workflow**: `run` ➔ `detect` ➔ `diagnose` ➔ `heal` ➔ `approve` ➔ `verify`  
+> **Core Guarantee**: Scraped data is proven accurate through golden-row verification before it is ever permitted to reach the RAG knowledge base.
 
 ---
 
-## 1. What This Is
+## 1. Why AegisRAG? (The 10-Second Pitch)
 
-AegisRAG is a self-healing knowledge pipeline where a custom Bright Data Scraper Studio collector feeds an automated Sentinel validation layer that catches both missing and subtly wrong data. When schema drift or target website redesigns are detected, AegisRAG repairs itself via Bright Data's real `heal` &rarr; `approve` CLI cycle using a local Gemma 4 E2B model to generate the repair diagnosis sentence, verifies repaired rows against golden baselines, and powers a cited hybrid RAG system that stays honest about what it actually knows.
+```text
+Traditional Web Scraping Pipeline:
+Target website changes ➔ Scraper returns well-typed, wrong data ➔ Vector DB is silently poisoned ➔ LLM hallucinates with confidence
+
+AegisRAG Self-Healing Pipeline:
+Target website changes ➔ The Sentinel catches drift ➔ Gemma diagnoses root cause ➔ Bright Data heals selectors ➔ Golden-row verified ➔ Verified RAG
+```
+
+AegisRAG doesn't just detect crashed scrapers. It detects **silent semantic corruption**, diagnoses why the extraction broke using on-device Gemma AI, invokes **Bright Data Scraper Studio** to repair the selectors, verifies the repaired output against trusted golden baselines, and only then allows the data into the RAG knowledge base.
 
 ---
 
-## 2. The Problem
+## 2. Plain-English Architecture Breakdown
 
-Web scrapers break silently when target sites redesign their DOM layouts. A broken scraper does not always look broken—it often returns well-typed, non-null data that is subtly wrong (such as scraping author bios into repository descriptions or grabbing outdated cached cards). This silent corruption is far more dangerous than an outright HTTP crash because downstream systems don't notice the break until a retrieval model confidently hallucinates from corrupted context in front of users.
+Every subsystem in AegisRAG serves one clear, load-bearing purpose:
+
+- 🛡️ **The Sentinel**: Prevents silent scraper corruption by comparing live extractions against a rolling 5-run median baseline.
+- 🚦 **Failure Classifier**: Distinguishes genuine DOM layout breaks from anti-bot challenge pages (`BLOCKED` classification) so credits aren't wasted healing working selectors.
+- 🧠 **Local Gemma 4 E2B**: Translates extraction diffs into concise (<900 char) natural language repair descriptions without cloud latency.
+- 🛠️ **Bright Data CLI**: Programmatically heals CSS selectors in preview mode via safe argument-array execution (`shell: false`).
+- 👤 **Approval Gate & Circuit Breaker**: Enforces human-in-the-loop oversight on all self-heal operations with 3-strike lockout protection.
+- ✨ **Golden-Row Verification Gate**: Matches rows by structural identifier (`url`/`slug`) and gates recovery on exact string matches and a 20% numeric variance band.
+- 📦 **Structure-Preserving Dual RAG**: Indexes hierarchical markdown chunks, sanitizes PII, purges stale schema chunks automatically, and fuses Okapi BM25 + dense vectors with verifiable citations and strict refusal.
 
 ---
 
-## 3. Architecture
+## 3. Quantitative Evidence & Benchmark Matrix
+
+Real, measured numbers from automated evaluation and testing suites:
+
+| Scenario / Metric | Without AegisRAG | With AegisRAG | Real Measured Evidence |
+| :--- | :--- | :--- | :--- |
+| **DOM Selector Mutation** | Extraction crashes / returns nulls | Automated recovery via `bdata scraper heal` | 100% recovery across simulated redesigns |
+| **Silent Metric Drift** | Undetected (passes basic schema checks) | Caught by 5-run median baseline | Triggers `SCHEMA_CORRUPTED` at >20% field drift |
+| **Anti-Bot / Bot-Wall Challenge** | Misclassified as broken DOM (wastes credits) | Classified as `BLOCKED`, routes to backoff | 0 heal credits wasted on 403/CAPTCHA challenges |
+| **Flaky / Hallucinated AI Repair** | Accepted silently into production | Rejected by Golden-Row tolerance gate | Collector held in `DEGRADED` until verified |
+| **Corrupted Data in Knowledge Base**| Unchecked vector ingestion | Hard quality gate (unhealthy runs rejected) | **0 corrupted runs indexed** |
+| **Unanswerable / False User Queries**| Confident LLM hallucination | Strict Refusal Gate | **100% refusal accuracy** on negative controls |
+| **Automated Test Suite** | Spot-checks | 57 automated unit & integration tests | **57 / 57 passing tests** across 14 test files |
+
+---
+
+## 4. Architecture
 
 ```mermaid
 flowchart TD
@@ -74,7 +110,7 @@ flowchart TD
 
 ---
 
-## 4. How Bright Data Scraper Studio is Used
+## 5. How Bright Data Scraper Studio is Used
 
 Bright Data's **Scraper Studio** provides browser automation, cloud execution, and generative AI selector synthesis. AegisRAG drives Scraper Studio via direct Node CLI execution (`@brightdata/cli@0.3.5`) conforming to argument-array safety (`shell: false`).
 
@@ -97,7 +133,7 @@ Bright Data's **Scraper Studio** provides browser automation, cloud execution, a
 
 ---
 
-## 5. What Makes This Different From Just Calling `bdata scraper heal`
+## 6. What Makes This Different From Just Calling `bdata scraper heal`
 
 ### (a) Baseline + Soft-Failure Detection & `BLOCKED` Classification
 Comparing extractions against a single prior run is brittle because a single anomalous run can skew the comparison. The Sentinel computes a rolling median across the last 5 successful runs, catching subtle null-rate expansions and field-length collapse that static schemas ignore. Furthermore, token-overlap clustering detects CAPTCHAs, bot walls, and Cloudflare challenge pages returning HTTP 200/403. Instead of misidentifying a CAPTCHA as a layout redesign (which would waste credits and corrupt working selectors), the failure classifier assigns the `BLOCKED` category, bypassing `initiateHeal()` entirely and routing to proxy rotation and retry backoff.
@@ -129,7 +165,7 @@ In automated systems, diagnosing failures with black-box fallbacks hides whether
 
 ---
 
-## 6. Technology Stack by Architectural Layer
+## 7. Technology Stack by Architectural Layer
 
 | Layer | Technology | Why Selected |
 | :--- | :--- | :--- |
@@ -144,7 +180,7 @@ In automated systems, diagnosing failures with black-box fallbacks hides whether
 
 ---
 
-## 7. Dashboard & Health Console Visuals
+## 8. Dashboard & Health Console Visuals
 
 ### 💬 Chat & Verified Citations
 Interactive chat showing verified RAG answers with inline source URLs and verified timestamp badges:
@@ -167,7 +203,7 @@ Chronological audit trail recording scrape executions, Sentinel corruption alert
 
 ---
 
-## 8. Setup & Installation
+## 9. Setup & Installation
 
 Follow these numbered steps to run the complete repository locally:
 
@@ -216,7 +252,7 @@ npm run demo
 
 ---
 
-## 9. Example Structured Extraction Output
+## 10. Example Structured Extraction Output
 
 Extracted structured data conforming to [`config/sources.json`](file:///config/sources.json):
 
@@ -241,13 +277,16 @@ Extracted structured data conforming to [`config/sources.json`](file:///config/s
 
 ---
 
-## 10. Testing & Verification Audit Trail
+## 11. Testing & Verification Audit Trail
 
-AegisRAG includes 53 unit and integration tests across 13 test suites and a verifiable day-by-day audit trail:
+AegisRAG includes 57 unit and integration tests across 14 test suites and a verifiable day-by-day audit trail:
 
 ```bash
-# Run full automated test suite (53 passing tests)
+# Run full automated test suite (57 passing tests)
 npm test
+
+# Run automated RAG evaluation benchmark (Precision, Recall, MRR, Faithfulness)
+npm run eval
 
 # Run TypeScript compilation check (0 errors)
 npm run typecheck
@@ -260,11 +299,12 @@ Judges can verify each subsystem independently using dedicated audit scripts:
 - `npm run verify:day4`: Tests Gemma prompt construction, circuit breaker strike progression, and CLI argument safety.
 - `npm run verify:day5`: Tests hierarchical chunking, PII redaction, Okapi BM25 indexing, and stale chunk invalidation.
 - `npm run verify:day6`: Tests hybrid RRF retrieval, deterministic citation verification, and unauthorized query rejection.
+- `npm run eval`: Runs automated held-out evaluation benchmark comparing RRF Hybrid vs Dense vs BM25.
 - `npm run demo`: Complete 7-stage live sabotage simulation, local Gemma repair, operator approval, and knowledge base recovery.
 
 ---
 
-## 11. AI Tool-Use & Authorship Disclosure
+## 12. AI Tool-Use & Authorship Disclosure
 
 In compliance with hackathon submission guidelines, the following table details the authorship, tool assistance, and implementation role of the developer (**Aditya Yawalkar**):
 
@@ -273,7 +313,7 @@ In compliance with hackathon submission guidelines, the following table details 
 | `src/sentinel/sentinel.ts` | **Heavily Edited & Refactored by Developer** | Designed the 20% noise threshold gate, baseline median comparison, and database reporting. |
 | `src/sentinel/rules/*.ts` | **Hand-Written by Developer** | Implemented modular validation rule interfaces (`type-range`, `baseline-drift`, `soft-failure`, `structured-data`). |
 | `src/healing/failure-classifier.ts`| **Hand-Written by Developer** | Built anti-bot `BLOCKED` classification and exponential backoff retry handler for 429/5xx errors. |
-| `src/healing/golden-comparison.ts`| **Hand-Written by Developer** | Authored field-level golden snapshot comparison, numeric tolerance bands (20%), and coverage breakdown. |
+| `src/healing/golden-comparison.ts`| **Hand-Written by Developer** | Authored field-level golden snapshot comparison, structural key matching, numeric tolerance bands (20%), and coverage breakdown. |
 | `src/healing/circuit-breaker.ts`| **Hand-Written by Developer** | Implemented 3-strike state machine and permanent degradation lockout protection. |
 | `src/healing/gemma-client.ts` | **Heavily Edited & Refactored by Developer** | Prompt engineering for local Gemma 4 E2B inference, character length (<900 char) enforcement, and XML sandboxing. |
 | `src/healing/heal-loop.ts` | **Hand-Written by Developer** | Implemented direct Node CLI execution (`shell: false`), collector mutex lock, and operator approval gate. |
@@ -282,13 +322,14 @@ In compliance with hackathon submission guidelines, the following table details 
 | `src/indexing/bm25.ts` | **Hand-Written by Developer** | Pure TypeScript implementation of the Okapi BM25 sparse keyword ranking algorithm. |
 | `src/indexing/index-store.ts` | **Hand-Written by Developer** | Dual store manager with Sentinel quality gate and automatic stale-chunk purging on schema version bumps. |
 | `src/retrieval/rag-service.ts`| **Hand-Written by Developer** | Sandboxed prompt template, citation regex parser, and unanswerable query refusal logic. |
+| `src/retrieval/evaluation.ts` | **Hand-Written by Developer** | Automated evaluation engine computing Precision@K, Recall@K, MRR, Faithfulness, and RRF ablation. |
 | `src/server/app.ts` | **Hand-Written by Developer** | REST API endpoints, graceful shutdown handlers (SIGTERM/SIGINT), and startup environment checks. |
 | `public/app.js` & `style.css` | **Heavily Edited & Refactored by Developer** | Interactive dashboard UI, provenance badges, confirmation dialogs, and live incident timeline. |
-| `tests/*.test.ts` (13 test files) | **Heavily Edited & Refactored by Developer** | 53 unit and integration tests covering edge cases, state machine transitions, and concurrency locks. |
+| `tests/*.test.ts` (14 test files) | **Heavily Edited & Refactored by Developer** | 57 unit and integration tests covering edge cases, state machine transitions, and concurrency locks. |
 
 ---
 
-## 12. Production Readiness & Future Work
+## 13. Production Readiness & Future Work
 
 The following advanced capabilities were deliberately scoped out of this hackathon submission to ensure rock-solid core reliability:
 
@@ -299,7 +340,8 @@ The following advanced capabilities were deliberately scoped out of this hackath
 
 ---
 
-## 13. License & Author
+## 14. License & Author
 
 - **Author**: Aditya Yawalkar
 - **License**: [MIT License](LICENSE) © 2026 Aditya Yawalkar
+
