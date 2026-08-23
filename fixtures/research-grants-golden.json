@@ -1,0 +1,39 @@
+[
+  {
+    "opportunity_title": "National AI & Robotics Foundation Collaborative Grant",
+    "sponsor_organization": "National Science & Technology Directorate",
+    "deadline": "2026-11-15",
+    "award_amount": 250000,
+    "application_url": "https://www.nsf.gov/funding/pgm_summ.jsp?pims_id=505987",
+    "research_areas": [
+      "Autonomous Systems",
+      "Robotics",
+      "Explainable AI",
+      "Safety Verification"
+    ]
+  },
+  {
+    "opportunity_title": "Open Frontier Science AI Research Fellowship",
+    "sponsor_organization": "Global Open Science Initiative",
+    "deadline": "2026-12-01",
+    "award_amount": 125000,
+    "application_url": "https://openscience.org/fellowships/ai-2026",
+    "research_areas": [
+      "Machine Learning",
+      "Computer Vision",
+      "Scientific Computing"
+    ]
+  },
+  {
+    "opportunity_title": "Autonomous Data Infrastructure Grant",
+    "sponsor_organization": "Digital Infrastructure Alliance",
+    "deadline": "2026-10-30",
+    "award_amount": 175000,
+    "application_url": "https://digitalalliance.org/grants/data-infra",
+    "research_areas": [
+      "Data Reliability",
+      "Web Extraction",
+      "Knowledge Graphs"
+    ]
+  }
+]

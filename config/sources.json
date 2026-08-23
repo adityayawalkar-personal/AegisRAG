@@ -28,5 +28,60 @@
       "duplicate_threshold_pct": 50
     },
     "created_at": "2026-08-18"
+  },
+  {
+    "source_id": "public-research-calls",
+    "name": "Public AI Research Grants & Open Calls Directory",
+    "target_url": "https://www.nsf.gov/funding/pgm_summ.jsp?pims_id=505987",
+    "collector_id": "c_opencall_grant_feed",
+    "expected_fields": [
+      "opportunity_title",
+      "sponsor_organization",
+      "deadline",
+      "award_amount",
+      "application_url",
+      "research_areas"
+    ],
+    "field_types": {
+      "opportunity_title": "string",
+      "sponsor_organization": "string",
+      "deadline": "string",
+      "award_amount": "number",
+      "application_url": "url",
+      "research_areas": "array"
+    },
+    "field_policies": {
+      "opportunity_title": {
+        "category": "structural",
+        "policy": "strict"
+      },
+      "sponsor_organization": {
+        "category": "structural",
+        "policy": "strict"
+      },
+      "deadline": {
+        "category": "structural",
+        "policy": "strict"
+      },
+      "award_amount": {
+        "category": "dynamic_numeric",
+        "policy": "numeric_tolerance",
+        "tolerance_pct": 20
+      },
+      "application_url": {
+        "category": "structural",
+        "policy": "strict"
+      },
+      "research_areas": {
+        "category": "structural",
+        "policy": "strict"
+      }
+    },
+    "validation_thresholds": {
+      "baseline_window": 5,
+      "corruption_threshold_pct": 20,
+      "duplicate_threshold_pct": 50
+    },
+    "created_at": "2026-08-23"
   }
 ]

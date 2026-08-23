@@ -288,8 +288,10 @@ export interface ApproveHealResult {
 
 /**
  * Manually approves a pending heal attempt, applying the repair to the live scraper.
- * Under Tier 2 Golden Snapshot validation: If verified rows breach tolerance bands,
- * keeps the collector in DEGRADED and records discrepancy feedback for the next heal cycle.
+ * PRE-APPROVAL GOLDEN VERIFICATION GATE:
+ * Verification occurs BEFORE invoking `bdata scraper approve`. If candidate preview rows
+ * breach golden baseline tolerances, the approval is blocked, the production collector
+ * is NOT modified, and discrepancy feedback is recorded for the next heal attempt.
  */
 export async function approveHeal(
   attemptId: string,
@@ -306,20 +308,7 @@ export async function approveHeal(
     throw new Error(`Cannot approve attempt in status '${attempt.status}'. Must be AWAITING_APPROVAL.`);
   }
 
-  logHeal(`[heal-loop] ✅ Approving heal attempt '${attemptId}' for collector '${attempt.collector_id}'...`);
-
-  const approveArgs = ['scraper', 'approve', attempt.collector_id];
-  const { stderr, exitCode } = await cliExec('approve', approveArgs);
-
-  if (exitCode !== 0) {
-    const errorMsg = `CLI approve exited with code ${exitCode}. Stderr: ${stderr.slice(0, 1000)}`;
-    warnHeal(`[heal-loop] Approval failed: ${errorMsg}`);
-    updateHealAttempt(attemptId, { status: 'FAILED', error_message: errorMsg, resolved_at: new Date().toISOString() }, db);
-    breaker.recordFailure(attempt.collector_id, errorMsg);
-    throw new Error(errorMsg);
-  }
-
-  // Tier 2 Detection & Gating: Compare new/preview row(s) against golden snapshot field-by-field
+  // --- STEP 1: PRE-APPROVAL GOLDEN VERIFICATION GATE ---
   let rowsToVerify: Record<string, unknown>[] = options.verificationRows || [];
   if (rowsToVerify.length === 0 && attempt.preview_result) {
     try {
@@ -334,15 +323,16 @@ export async function approveHeal(
     }
   }
 
+  logHeal(`[heal-loop] 🔍 Running Pre-Approval Golden Verification Gate on candidate preview (${rowsToVerify.length} row(s))...`);
   const goldenSummary = compareAgainstGoldenSnapshot(attempt.collector_id, rowsToVerify, { db });
   const beyondTolerance = goldenSummary.discrepancies.filter((d) => d.isBeyondTolerance);
 
   if (beyondTolerance.length > 0) {
-    const errorMsg = `Golden snapshot tolerance exceeded: ${beyondTolerance
+    const errorMsg = `Pre-Approval Gate Rejected: Golden snapshot tolerance exceeded: ${beyondTolerance
       .map((d) => `${d.field} (Row ${d.rowIndex}): expected ${JSON.stringify(d.goldenValue)}, got ${JSON.stringify(d.actualValue)}`)
       .join('; ')}`;
 
-    warnHeal(`[heal-loop] ⚠️ ${errorMsg}. Keeping collector '${attempt.collector_id}' in DEGRADED for re-healing.`);
+    warnHeal(`[heal-loop] 🛑 ${errorMsg}. Blocked CLI approval — production collector '${attempt.collector_id}' was NOT modified.`);
 
     updateHealAttempt(
       attemptId,
@@ -375,9 +365,35 @@ export async function approveHeal(
     };
   }
 
+  // --- STEP 2: APPLY LIVE CLI APPROVAL ONLY AFTER GOLDEN GATE PASSES ---
+  logHeal(`[heal-loop] ✅ Pre-Approval Gate PASSED. Approving heal attempt '${attemptId}' for live collector '${attempt.collector_id}'...`);
+
+  const approveArgs = ['scraper', 'approve', attempt.collector_id];
+  const { stderr, exitCode } = await cliExec('approve', approveArgs);
+
+  if (exitCode !== 0) {
+    const errorMsg = `CLI approve exited with code ${exitCode}. Stderr: ${stderr.slice(0, 1000)}`;
+    warnHeal(`[heal-loop] Approval failed on CLI execution: ${errorMsg}`);
+    updateHealAttempt(attemptId, { status: 'FAILED', error_message: errorMsg, resolved_at: new Date().toISOString() }, db);
+    breaker.recordFailure(attempt.collector_id, errorMsg);
+    throw new Error(errorMsg);
+  }
+
   const resolvedAt = new Date().toISOString();
   updateHealAttempt(attemptId, { status: 'APPROVED', resolved_at: resolvedAt }, db);
   breaker.recordSuccess(attempt.collector_id);
+
+  // Transition collector state to RECOVERED
+  setCollectorState(
+    {
+      collector_id: attempt.collector_id,
+      status: 'RECOVERED',
+      consecutive_failures: 0,
+      last_healed_at: resolvedAt,
+      updated_at: resolvedAt,
+    },
+    db
+  );
 
   const updatedAttempt = getHealAttemptById(attemptId, db)!;
   logHeal(`[heal-loop] 🎉 Heal approved successfully. Collector '${attempt.collector_id}' transitioned to RECOVERED.`);
