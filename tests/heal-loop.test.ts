@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { initiateHeal, approveHeal, rejectHeal, HealInProgressError } from '../src/healing/heal-loop.js';
 import { CircuitBreaker, CircuitBreakerTrippedError } from '../src/healing/circuit-breaker.js';
-import { createTestDatabase, insertRawRun, type RawRunRecord, type DatabaseType } from '../src/db/database.js';
+import { compareAgainstGoldenSnapshot } from '../src/healing/golden-comparison.js';
+import { createTestDatabase, insertRawRun, saveGoldenRows, type RawRunRecord, type DatabaseType } from '../src/db/database.js';
 import { type SentinelReport } from '../src/sentinel/types.js';
 
 describe('The Self-Healing Loop & Circuit Breaker', () => {
@@ -258,5 +259,37 @@ describe('The Self-Healing Loop & Circuit Breaker', () => {
 
     // CLI heal must NOT have been called (wasting credits prevented)
     expect(mockCli).not.toHaveBeenCalled();
+  });
+
+  it('matches rows structurally by unique key even when scrape ordering is shuffled', () => {
+    // Golden reference with 2 rows in original order
+    const goldenSnapshot = [
+      { repo_name: 'facebook/react', url: 'https://github.com/facebook/react', stars_today: '100 stars today' },
+      { repo_name: 'vercel/next.js', url: 'https://github.com/vercel/next.js', stars_today: '200 stars today' },
+    ];
+
+    // Actual rows returned in REVERSED order (e.g. site trending shuffle)
+    const shuffledActualRows = [
+      { repo_name: 'vercel/next.js', url: 'https://github.com/vercel/next.js', stars_today: '205 stars today' },
+      { repo_name: 'facebook/react', url: 'https://github.com/facebook/react', stars_today: '105 stars today' },
+    ];
+
+    saveGoldenRows(
+      {
+        collector_id: 'c_shuffled_test',
+        snapshot_json: JSON.stringify(goldenSnapshot),
+        captured_at: new Date().toISOString(),
+        row_count: goldenSnapshot.length,
+      },
+      db
+    );
+
+    const comparison = compareAgainstGoldenSnapshot('c_shuffled_test', shuffledActualRows, { db });
+    
+    // Must match structurally by URL/repo_name, not by index, so tolerance passes!
+    expect(comparison.isVerified).toBe(true);
+    expect(comparison.matchStrategy).toBe('structural_identifier');
+    expect(comparison.identifierField).toBe('url');
+    expect(comparison.discrepancies).toHaveLength(0);
   });
 });

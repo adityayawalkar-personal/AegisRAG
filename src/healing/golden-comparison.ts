@@ -6,11 +6,40 @@ import { getGoldenRows, getDatabase } from '../db/database.js';
 export interface GoldenDiscrepancy {
   collectorId: string;
   rowIndex: number;
+  rowIdentifier?: string;
   field: string;
   goldenValue: unknown;
   actualValue: unknown;
   isBeyondTolerance: boolean;
   reason?: string;
+}
+
+const IDENTIFIER_CANDIDATES = [
+  'url',
+  'product_page_url',
+  'repo_name',
+  'slug',
+  'id',
+  'title',
+  'name',
+  'link',
+  'href',
+];
+
+/**
+ * Finds the first stable structural identifier field present across rows.
+ */
+export function findRowIdentifierField(rows: Record<string, unknown>[]): string | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const sample = rows[0];
+  if (!sample || typeof sample !== 'object') return null;
+
+  for (const candidate of IDENTIFIER_CANDIDATES) {
+    if (candidate in sample && sample[candidate] !== null && sample[candidate] !== undefined && String(sample[candidate]).trim() !== '') {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 export interface GoldenVerificationSummary {
@@ -22,6 +51,8 @@ export interface GoldenVerificationSummary {
   coveragePct: number;
   capturedAt?: string;
   source: 'database_golden_rows' | 'collector_fixture' | 'default_golden_run' | 'none';
+  matchStrategy: 'structural_identifier' | 'array_index';
+  identifierField?: string;
 }
 
 export interface CompareOptions {
@@ -155,7 +186,22 @@ export function compareAgainstGoldenSnapshot(
       isVerified: true,
       coveragePct: 0,
       source: 'none',
+      matchStrategy: 'array_index',
     };
+  }
+
+  // Determine structural identifier field if present (e.g. url, product_page_url, repo_name, slug)
+  const identifierField = findRowIdentifierField(goldenRows) || findRowIdentifierField(actualRows) || undefined;
+  const matchStrategy: GoldenVerificationSummary['matchStrategy'] = identifierField ? 'structural_identifier' : 'array_index';
+
+  // Build a fast lookup map for golden rows by structural identifier
+  const goldenRowsByKey = new Map<string, Record<string, unknown>>();
+  if (identifierField) {
+    for (const r of goldenRows) {
+      if (r && r[identifierField] !== null && r[identifierField] !== undefined) {
+        goldenRowsByKey.set(String(r[identifierField]).trim().toLowerCase(), r);
+      }
+    }
   }
 
   // Determine all fields in actual rows and golden rows
@@ -184,8 +230,22 @@ export function compareAgainstGoldenSnapshot(
 
   for (let i = 0; i < actualRows.length; i++) {
     const actualRow = actualRows[i];
-    const goldenRow = goldenRows[i];
-    if (!actualRow || !goldenRow) continue;
+    if (!actualRow) continue;
+
+    // Structural key lookup with fallback to array index
+    let goldenRow: Record<string, unknown> | undefined;
+    let rowIdentifier: string | undefined;
+
+    if (identifierField && actualRow[identifierField] !== null && actualRow[identifierField] !== undefined) {
+      rowIdentifier = String(actualRow[identifierField]).trim();
+      goldenRow = goldenRowsByKey.get(rowIdentifier.toLowerCase());
+    }
+
+    if (!goldenRow) {
+      goldenRow = goldenRows[i];
+    }
+
+    if (!goldenRow) continue;
 
     for (const field of coveredFields) {
       const goldenVal = goldenRow[field];
@@ -197,6 +257,7 @@ export function compareAgainstGoldenSnapshot(
         discrepancies.push({
           collectorId,
           rowIndex: i,
+          rowIdentifier,
           field,
           goldenValue: goldenVal,
           actualValue: actualVal,
@@ -213,16 +274,16 @@ export function compareAgainstGoldenSnapshot(
 
   if (discrepancies.length > 0) {
     console.warn(
-      `[heal-loop] ⚠️ Golden Snapshot Discrepancy detected for collector '${collectorId}' (${discrepancies.length} field mismatch(es) beyond tolerance):`
+      `[heal-loop] ⚠️ Golden Snapshot Discrepancy detected for collector '${collectorId}' (${discrepancies.length} field mismatch(es) beyond tolerance via ${matchStrategy}):`
     );
     for (const d of discrepancies) {
       console.warn(
-        `  - Collector '${d.collectorId}' [Field '${d.field}' at Row ${d.rowIndex}]: Golden = ${JSON.stringify(d.goldenValue)}, Actual = ${JSON.stringify(d.actualValue)} (${d.reason})`
+        `  - Collector '${d.collectorId}' [Field '${d.field}' at Row ${d.rowIndex}${d.rowIdentifier ? ` (${d.rowIdentifier})` : ''}]: Golden = ${JSON.stringify(d.goldenValue)}, Actual = ${JSON.stringify(d.actualValue)} (${d.reason})`
       );
     }
   } else {
     console.log(
-      `[heal-loop] ✨ Golden snapshot comparison verified for collector '${collectorId}' (${coveredFields.length} field(s) verified, ${uncoveredFields.length} uncovered via source '${source}').`
+      `[heal-loop] ✨ Golden snapshot comparison verified for collector '${collectorId}' (${coveredFields.length} field(s) verified via ${matchStrategy}${identifierField ? ` on '${identifierField}'` : ''}, ${uncoveredFields.length} uncovered via source '${source}').`
     );
   }
 
@@ -235,5 +296,7 @@ export function compareAgainstGoldenSnapshot(
     coveragePct,
     capturedAt,
     source,
+    matchStrategy,
+    identifierField,
   };
 }

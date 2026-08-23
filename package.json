@@ -24,6 +24,7 @@
     "verify:day4": "tsx src/scripts/verify-day4.ts",
     "verify:day5": "tsx src/scripts/verify-day5.ts",
     "verify:day6": "tsx src/scripts/verify-day6.ts",
+    "eval": "tsx src/scripts/run-eval.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

@@ -157,7 +157,20 @@ export class IndexStore {
     return this.bm25.search(query, topK);
   }
 
+  public searchBM25(query: string, topK: number = 10): BM25SearchResult[] {
+    return this.bm25.search(query, topK);
+  }
+
   public getAllChunksForCollector(collectorId: string, schemaVersion?: number): ChunkRecord[] {
     return getChunksByCollector(collectorId, schemaVersion, this.db);
+  }
+
+  public getAllChunks(): ChunkRecord[] {
+    const stmt = this.db.prepare(`SELECT * FROM chunks_index`);
+    return stmt.all() as ChunkRecord[];
+  }
+
+  public size(): number {
+    return this.bm25.size();
   }
 }
