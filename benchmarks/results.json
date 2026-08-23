@@ -6,7 +6,7 @@
   "collectorIdPreservationPct": 100,
   "corruptedIngestionPreventionPct": 100,
   "averageRecoveryLatencyMs": 30,
-  "benchmarkedAt": "2026-08-23T17:29:01.814Z",
+  "benchmarkedAt": "2026-08-23T17:37:41.268Z",
   "results": [
     {
       "scenarioId": "SCENARIO-01",
@@ -19,7 +19,7 @@
       "goldenVerificationPassed": true,
       "collectorIdPreserved": true,
       "downstreamCorruptedIngestionPrevented": true,
-      "durationMs": 131
+      "durationMs": 134
     },
     {
       "scenarioId": "SCENARIO-02",
@@ -58,7 +58,7 @@
       "goldenVerificationPassed": true,
       "collectorIdPreserved": true,
       "downstreamCorruptedIngestionPrevented": true,
-      "durationMs": 11
+      "durationMs": 10
     },
     {
       "scenarioId": "SCENARIO-05",
