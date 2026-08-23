@@ -12,7 +12,8 @@ async function main() {
   const sources = loadSourcesConfig();
   const source = sources[0];
 
-  const latestStatus = getLatestRunStatus(source.source_id, db);
+  const statuses = getLatestRunStatus(source.source_id, 1, db);
+  const latestStatus = statuses[0];
   if (!latestStatus || (latestStatus.status !== 'SCHEMA_CORRUPTED' && latestStatus.status !== 'FAILED')) {
     console.log(`ℹ️ Current collector '${source.collector_id}' is not in a corrupted state. Run 'npm run demo:break' first.`);
     return;
